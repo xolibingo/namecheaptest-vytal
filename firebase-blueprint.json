@@ -1,0 +1,110 @@
+{
+  "entities": {
+    "Clinic": {
+      "title": "Clinic",
+      "description": "A hospital or clinic tenant in the SaaS",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique clinic identifier" },
+        "name": { "type": "string", "description": "Clinic name" },
+        "location": { "type": "string", "description": "City or Region" },
+        "country": { "type": "string", "description": "South Africa, Botswana, or Eswatini" },
+        "tier": { "type": "string", "enum": ["pilot", "basic", "pro", "enterprise"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "country", "tier", "createdAt"]
+    },
+    "Patient": {
+      "title": "Patient",
+      "description": "An enrolled pregnant woman",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique patient identifier" },
+        "clinicId": { "type": "string", "description": "Reference to the governing clinic" },
+        "name": { "type": "string", "description": "Patient's name" },
+        "phoneNumber": { "type": "string", "description": "Patient's mobile number" },
+        "age": { "type": "integer", "description": "Patient's age" },
+        "gestationalWeeks": { "type": "integer", "description": "Gestational age in weeks" },
+        "edd": { "type": "string", "description": "Estimated Due Date" },
+        "medicalHistory": { "type": "array", "description": "List of historical risk factors or conditions" },
+        "riskLevel": { "type": "string", "enum": ["normal", "medium", "high", "critical"] },
+        "riskDrivingSignal": { "type": "string", "description": "AI driving signal explaining risk level" },
+        "consentGranted": { "type": "boolean", "description": "Whether the patient granted PHI processing consent" },
+        "consentVersion": { "type": "string", "description": "Signed consent form identifier" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clinicId", "name", "phoneNumber", "gestationalWeeks", "riskLevel", "consentGranted", "createdAt"]
+    },
+    "VitalsLog": {
+      "title": "VitalsLog",
+      "description": "A temporal vitals entry for a patient",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique vitals log ID" },
+        "patientId": { "type": "string", "description": "Target patient reference" },
+        "systolic": { "type": "integer", "description": "Systolic blood pressure (mmHg)" },
+        "diastolic": { "type": "integer", "description": "Diastolic blood pressure (mmHg)" },
+        "pulse": { "type": "integer", "description": "Pulse/Heart rate (bpm)" },
+        "temperature": { "type": "number", "description": "Body temperature in Celsius" },
+        "weight": { "type": "number", "description": "Body weight in kg" },
+        "symptoms": { "type": "array", "description": "List of active danger signs reported" },
+        "recordedBy": { "type": "string", "enum": ["nurse", "CHW", "patient"] },
+        "riskAlerts": { "type": "array", "description": "Early-warning alerts generated from this reading" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "patientId", "systolic", "diastolic", "createdAt"]
+    },
+    "ChatLog": {
+      "title": "ChatLog",
+      "description": "Messages between user and AI educational companion",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique message ID" },
+        "patientId": { "type": "string", "description": "Patient chat partition key" },
+        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "patientId", "role", "text", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "A POPIA & regional DPA compliance operational record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Log identification" },
+        "clinicId": { "type": "string", "description": "Linked clinic/tenant context" },
+        "userId": { "type": "string", "description": "User UID who initiated the action" },
+        "userEmail": { "type": "string", "description": "Clinician details for auditing" },
+        "action": { "type": "string", "description": "Action performed (e.g. READ_PATIENT_PHI, ENROLL_PATIENT, LOG_VITALS)" },
+        "resource": { "type": "string", "description": "Resource identifier" },
+        "details": { "type": "string", "description": "Meta details" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "clinicId", "userId", "userEmail", "action", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/clinics/{clinicId}": {
+      "schema": "Clinic",
+      "description": "Tenant facilities"
+    },
+    "/patients/{patientId}": {
+      "schema": "Patient",
+      "description": "Maternal health patients"
+    },
+    "/patients/{patientId}/vitals/{vitalsId}": {
+      "schema": "VitalsLog",
+      "description": "Vitals and symptom log history"
+    },
+    "/patients/{patientId}/chats/{messageId}": {
+      "schema": "ChatLog",
+      "description": "Patient educational chat logs with the AI companion"
+    },
+    "/auditLogs/{auditId}": {
+      "schema": "AuditLog",
+      "description": "System-wide data access audit trails for POPIA and DPA compliance"
+    }
+  }
+}

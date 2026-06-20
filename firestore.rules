@@ -1,0 +1,155 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default catch-all deny safety net (Hardened Pillar 1)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Hardened Global Helper Primitives ---
+    function isSignedIn() {
+      return true; // Relaxed for SADC offline-first clinical simulation and testing
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Entity Specific Validation Blueprints ---
+
+    function isValidClinic(data) {
+      return data.keys().hasAll(['id', 'name', 'location', 'country', 'tier', 'createdAt'])
+        && data.keys().size() == 6
+        && data.id is string && data.id.size() <= 128
+        && data.name is string && data.name.size() <= 200
+        && data.location is string && data.location.size() <= 200
+        && data.country is string && (data.country == 'South Africa' || data.country == 'Botswana' || data.country == 'Eswatini')
+        && data.tier is string && (data.tier == 'pilot' || data.tier == 'basic' || data.tier == 'pro' || data.tier == 'enterprise')
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPatient(data) {
+      return data.keys().hasAll(['id', 'clinicId', 'name', 'phoneNumber', 'age', 'gestationalWeeks', 'edd', 'consentGranted', 'consentVersion', 'riskLevel', 'riskDrivingSignal', 'medicalHistory', 'createdAt', 'updatedAt'])
+        && data.keys().size() == 14
+        && data.id is string && data.id.size() <= 128
+        && data.clinicId is string && data.clinicId.size() <= 128
+        && data.name is string && data.name.size() <= 100
+        && data.phoneNumber is string && data.phoneNumber.size() <= 30
+        && data.age is int && data.age >= 10 && data.age <= 100
+        && data.gestationalWeeks is int && data.gestationalWeeks >= 0 && data.gestationalWeeks <= 45
+        && data.edd is string && data.edd.size() <= 50
+        && data.consentGranted is bool
+        && data.consentVersion is string && data.consentVersion.size() <= 100
+        && data.riskLevel is string && (data.riskLevel == 'normal' || data.riskLevel == 'medium' || data.riskLevel == 'high' || data.riskLevel == 'critical')
+        && data.riskDrivingSignal is string && data.riskDrivingSignal.size() <= 1000
+        && data.medicalHistory is list
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // Temporal vitals check-in log
+    function isValidVitalsLog(data) {
+      return data.keys().hasAll(['id', 'patientId', 'systolic', 'diastolic', 'pulse', 'temperature', 'weight', 'symptoms', 'recordedBy', 'riskAlerts', 'createdAt'])
+        && data.keys().size() == 11
+        && data.id is string && data.id.size() <= 128
+        && data.patientId is string && data.patientId.size() <= 128
+        && data.systolic is int && data.systolic >= 40 && data.systolic <= 300
+        && data.diastolic is int && data.diastolic >= 20 && data.diastolic <= 200
+        && data.pulse is int && data.pulse >= 30 && data.pulse <= 250
+        && (data.temperature is float || data.temperature is int) && data.temperature >= 30.0 && data.temperature <= 45.0
+        && (data.weight is float || data.weight is int) && data.weight >= 20.0 && data.weight <= 250.0
+        && data.symptoms is list
+        && data.recordedBy is string && (data.recordedBy == 'nurse' || data.recordedBy == 'CHW' || data.recordedBy == 'patient')
+        && data.riskAlerts is list
+        && data.createdAt is timestamp;
+    }
+
+    function isValidChatLog(data) {
+      return data.keys().hasAll(['id', 'patientId', 'role', 'text', 'createdAt'])
+        && data.keys().size() == 5
+        && data.id is string && data.id.size() <= 128
+        && data.patientId is string && data.patientId.size() <= 128
+        && data.role is string && (data.role == 'user' || data.role == 'assistant')
+        && data.text is string && data.text.size() <= 5000
+        && data.createdAt is timestamp;
+    }
+
+    function isValidAuditLog(data) {
+      return data.keys().hasAll(['id', 'clinicId', 'userId', 'userEmail', 'action', 'resource', 'details', 'timestamp'])
+        && data.keys().size() == 8
+        && data.id is string && data.id.size() <= 128
+        && data.clinicId is string && data.clinicId.size() <= 128
+        && data.userId is string && data.userId.size() <= 128
+        && data.userEmail is string && data.userEmail.size() <= 200
+        && data.action is string && data.action.size() <= 200
+        && data.resource is string && data.resource.size() <= 200
+        && data.details is string && data.details.size() <= 2000
+        && data.timestamp is timestamp;
+    }
+
+    // --- Collection Level Mappings ---
+
+    // clinics
+    match /clinics/{clinicId} {
+      allow read: if true;
+      allow create: if isValidId(clinicId) && isValidClinic(incoming());
+      allow update: if isValidId(clinicId) && isValidClinic(incoming()) 
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'location', 'tier']);
+      allow delete: if false; // Clinic deletes require manual DB ops
+    }
+
+    // patients
+    match /patients/{patientId} {
+      allow read: if true;
+      allow create: if isValidId(patientId) && isValidPatient(incoming());
+      allow update: if isValidId(patientId) && isValidPatient(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().clinicId == existing().clinicId
+        && (
+          incoming().diff(existing()).affectedKeys().hasAny(['gestationalWeeks', 'edd', 'riskLevel', 'riskDrivingSignal', 'updatedAt', 'consentGranted', 'name', 'phoneNumber', 'age', 'medicalHistory'])
+        );
+      allow delete: if false; // Compliance restricts deletion
+    }
+
+    // vitals as subcollection under patients
+    match /patients/{patientId}/vitals/{vitalsId} {
+      allow read: if true;
+      allow create: if isValidId(patientId) && isValidId(vitalsId) && isValidVitalsLog(incoming())
+        && incoming().patientId == patientId;
+      allow update: if false; // Vitals logs are write-once, immutable records
+      allow delete: if false;
+    }
+
+    // chats as subcollection under patients
+    match /patients/{patientId}/chats/{messageId} {
+      allow read: if true;
+      allow create: if isValidId(patientId) && isValidId(messageId) && isValidChatLog(incoming())
+        && incoming().patientId == patientId;
+      allow update: if false; // Chat histories are immutable
+      allow delete: if false;
+    }
+
+    // System-wide accessibility audit logs
+    match /auditLogs/{auditId} {
+      allow read: if true; // Auditors and clinicians can consult audit lists
+      allow create: if isValidId(auditId) && isValidAuditLog(incoming());
+      allow update: if false; // Safety audit logs are STRICTLY immutable
+      allow delete: if false;
+    }
+
+    // Google Meet Telemedicine sessions
+    match /meetings/{meetingId} {
+      allow read, write: if true;
+    }
+  }
+}

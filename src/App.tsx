@@ -1,0 +1,1810 @@
+import React, { useState, useEffect } from "react";
+import PatientPortal from "./components/PatientPortal";
+import ClinicianPortal from "./components/ClinicianPortal";
+import { Clinician, PatientReport, VitalsLog, MaternalMeeting, PostpartumCheckup, HospitalVisit } from "./types";
+import { isFirebaseConfigured, db, handleFirestoreError, OperationType } from "./lib/firebase";
+import { collection, onSnapshot, setDoc, doc, getDocs } from "firebase/firestore";
+import { 
+  Stethoscope, 
+  Globe, 
+  Heart, 
+  Lock, 
+  Smartphone, 
+  Sparkles, 
+  ActivitySquare, 
+  AlertTriangle,
+  Menu,
+  ShieldCheck,
+  CheckCircle2,
+  ArrowRight,
+  PhoneCall,
+  Download,
+  Info,
+  HelpCircle,
+  Phone,
+  X
+} from "lucide-react";
+
+// Interactive regional African & rare pregnancy conditions database for awareness raising
+const awarenessConditions = [
+  {
+    id: "pre-eclampsia",
+    name: "Pre-Eclampsia / Eclampsia",
+    icon: "🩸",
+    prevalence: "Affects 8-10% of gestations in Sub-Saharan Africa. One of the leading direct causes of maternal mortality in Southern African clinics.",
+    desc: "A rapid-onset pregnancy complication characterized by high blood pressure, protein in urine, and sudden swollen limbs. Left untreated, it can transition into life-threatening eclampsia (seizures).",
+    signals: [
+      "Severe persistent headache that won't go away",
+      "Sudden swelling (edema) in face, hands, and feet",
+      "Visual disturbances or blurring/spots",
+      "Upper abdominal pain or nausea"
+    ],
+    precautions: [
+      "Check blood pressure regularly (aim for under 140/90 mmHg)",
+      "Reduce excess processed salts and stay thoroughly hydrated",
+      "Attend every scheduled prenatal clinic screening session",
+      "Consult a doctor early if sudden weight gain occurs"
+    ],
+    howVytalHelps: "Vytal's offline triage engine checks entered pressures. Any systolic value over 140 or diastolic over 90 triggers an immediate system alert, automatically creating a high-priority report for Dr. Masuku's portal."
+  },
+  {
+    id: "diabetes",
+    name: "Gestational Diabetes (GDM)",
+    icon: "🍬",
+    prevalence: "Frequently under-reported, affecting up to 7-14% of African mothers, rising significantly with urban dietary changes.",
+    desc: "High blood glucose levels that develop during pregnancy. Can trigger excessive fetal birthweight, complex delivery procedures, and neonatal hypoglycemia.",
+    signals: [
+      "Unusual or continuous excessive thirst",
+      "Unusually frequent urination (especially during late hours)",
+      "Heavy physical fatigue or blurred vision",
+      "Recurrent minor skin or vaginal infections"
+    ],
+    precautions: [
+      "Log visual or metric blood sugar counts weekly",
+      "Focus on low-glycemic, fiber-rich local grains",
+      "Engage in safe, low-impact exercise (e.g., 20 min morning walks)",
+      "Receive glucose screening between weeks 24 and 28"
+    ],
+    howVytalHelps: "Secure biometric tracking charts blood sugars and tags anomalies. It suggests non-medical dietary guides from the Academy and notifies the community support system for remote reassurance."
+  },
+  {
+    id: "anemia",
+    name: "Iron Deficiency Anemia",
+    icon: "🥗",
+    prevalence: "Prevalent in up to 40% of pregnancies across remote SADC communities, causing increased risk of postpartum bleeding (hemorrhage).",
+    desc: "A condition where red blood cell count drops dangerously due to low dietary iron, locking oxygen supply to the child and leaving mothers severely weak.",
+    signals: [
+      "Severe fatigue, weakness, or lethargy",
+      "Pale eyelids, gums, skin, or nail beds",
+      "Dizziness, lightheadedness, or fast breathing",
+      "Unusual cravings for ice or dirt (pica)"
+    ],
+    precautions: [
+      "Incorporate iron-rich meals (spinach, beans, eggs, lean meats)",
+      "Take daily prescribed prenatal iron & folic acid (IFA) supplements",
+      "Vitamin C (e.g. oranges) boosts iron absorbed from vegetarian meals",
+      "Avoid drinking coffee/tea with food, as they block iron absorption"
+    ],
+    howVytalHelps: "Ask Vytal's voice triage interprets vocal fatigue complaints. The Academy provides interactive guidelines on localized nutritional ingredients and triggers routine iron-intake reminders."
+  },
+  {
+    id: "ppcm",
+    name: "Peripartum Cardiomyopathy (PPCM)",
+    icon: "🫀",
+    prevalence: "Rare worldwide, but significantly more prevalent in Sub-Saharan African women (~1 in 1,000 live births), with genetic and geographic risk factors.",
+    desc: "An idiopathic, rare form of heart muscle weakness that develops in the final month of pregnancy or first 5 months postpartum. Symptoms overlap with standard end-of-pregnancy signs, making awareness crucial.",
+    signals: [
+      "Extreme shortness of breath, especially when lying completely flat",
+      "Severe nighttime coughing or chest tight sensation",
+      "Rapid, fluttery resting heart rate (palpitations)",
+      "Excessive swelling in lower legs and ankles"
+    ],
+    precautions: [
+      "Track pulse metrics during times of rest (resting heart rate should stay stable)",
+      "Avoid sleeping completely flat if breathing feels heavily restricted",
+      "Do not shrug off extreme breathing distress in week 36+ as 'normal pregnancy heavy breathing'",
+      "Consult a doctor early if sudden weight gain or heart flutters postpartum"
+    ],
+    howVytalHelps: "If resting heart rate logs exceed clinical boundaries (e.g., above 100 bpm), Vytal flags it under 'Extreme Caution' and enqueues immediate warning indicators on the Clinician's master board."
+  },
+  {
+    id: "afe",
+    name: "Amniotic Fluid Embolism (AFE)",
+    icon: "⚠️",
+    prevalence: "Extremely rare (1 in 40,000 births) but highly fatal global emergency, demanding instantaneous hospital dispatch.",
+    desc: "An unpredictable, rapid clinical emergency where amniotic fluid leaks into the maternal bloodstream during late labor, causing severe rapid cardiorespiratory distress.",
+    signals: [
+      "Sudden, massive drop in breathing capacity",
+      "Rapid blood pressure collapse or severe bluish fingers (hypoxia)",
+      "Uncontrolled shivering, anxiety, or state of panic during early labor",
+      "Sudden fetal heart tone drops"
+    ],
+    precautions: [
+      "Labor must occur in professional clinics or referral institutions with resuscitation kits",
+      "Ensure clinicians are prepared for immediate high-oxygen delivery setups",
+      "Identify high-risk indicators (e.g., advanced maternal age or placental complications)",
+      "Know your regional referral emergency ambulance dispatch coordinates"
+    ],
+    howVytalHelps: "Provides quick single-click SADC Ambulance or Mbabane Dispatch VoIP dialers, streaming biometric history logs as doctors race to provide emergency advanced life support."
+  }
+];
+
+export default function App() {
+  // Navigation Routing Mode: "landing" | "patient" | "clinician"
+  const [activeSurface, setActiveSurface] = useState<"landing" | "patient" | "clinician">("landing");
+  
+  // Track regional awareness interactive sub-selection
+  const [activeAwarenessId, setActiveAwarenessId] = useState<string>("pre-eclampsia");
+
+  // Gestational index sandbox sync state
+  const [currentWeek, setCurrentWeek] = useState<number>(18);
+  
+  // Secure logged in clinician session (Sister Thandeka)
+  const [sessionClinician, setSessionClinician] = useState<Clinician | null>(null);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [shouldShake, setShouldShake] = useState(false);
+  const [showForgotPinModal, setShowForgotPinModal] = useState(false);
+  const [showQuickContactsModal, setShowQuickContactsModal] = useState(false);
+
+  // Offline-first simulation state
+  const [isOfflineMode, setIsOfflineMode] = useState<boolean>(false);
+
+  // Postpartum Checkups State (for Mama's first two weeks postpartum)
+  const [postpartumCheckups, setPostpartumCheckups] = useState<PostpartumCheckup[]>([
+    {
+      id: "ppc-1",
+      patientId: "pat-2",
+      patientName: "Kelebogile Mokgoro",
+      day: "Day 1 Postpartum Diagnostic",
+      date: "2026-06-18",
+      status: "completed",
+      clinicianName: "Sister Thandeka Kunene",
+      vitals: { bp: "115/72", hr: 78, temp: 36.5, weight: 70.2 },
+      lochiaStatus: "Normal/Moderate",
+      breastfeedingStatus: "Established with assist",
+      neonatalJaundice: "Absent",
+      doctorNotes: "Lochia flow normal, fundus firm and well-contracted. Mother is walking comfortably. Baby Sifiso breastfeeding nicely.",
+      tasks: [
+        { label: "Check physical fundus firmness", done: true },
+        { label: "Initiate immediate direct latch", done: true },
+        { label: "Review red flag warning signs (hemorrhage)", done: true }
+      ]
+    },
+    {
+      id: "ppc-2",
+      patientId: "pat-2",
+      patientName: "Kelebogile Mokgoro",
+      day: "Day 3 Vital Checkup & Screening",
+      date: "2026-06-20",
+      status: "completed",
+      clinicianName: "Sister Thandeka Kunene",
+      vitals: { bp: "118/75", hr: 82, temp: 36.6, weight: 70.0 },
+      lochiaStatus: "Normal / Serosa",
+      breastfeedingStatus: "Active",
+      neonatalJaundice: "Mild (Monitor)",
+      doctorNotes: "Regular check completed. Mild newborn jaundice noted, instructed mother on morning sunlight therapy. Follow-up scheduled.",
+      tasks: [
+        { label: "Measure blood pressure & maternal temp", done: true },
+        { label: "Screen newborn for bilirubin / jaundice signs", done: true },
+        { label: "Counsel on emotional wellness (baby blues)", done: true }
+      ]
+    },
+    {
+      id: "ppc-3",
+      patientId: "pat-2",
+      patientName: "Kelebogile Mokgoro",
+      day: "Day 7 Wound & Infant Review",
+      date: "2026-06-25",
+      status: "scheduled",
+      clinicianName: "Dr. Thabo Masuku",
+      vitals: { bp: "", hr: 0, temp: 0, weight: 0 },
+      lochiaStatus: "Pending evaluation",
+      breastfeedingStatus: "Pending evaluation",
+      neonatalJaundice: "Pending evaluation",
+      doctorNotes: "To check: postpartum maternal wound healing, neonatal weight progression, breastfeeding latch posture.",
+      tasks: [
+        { label: "Examine perineal/cesarean wound healing", done: false },
+        { label: "Weigh baby & confirm weight progression", done: false },
+        { label: "Review infantile sleep safe environments", done: false }
+      ]
+    },
+    {
+      id: "ppc-4",
+      patientId: "pat-2",
+      patientName: "Kelebogile Mokgoro",
+      day: "Day 14 Immunization & Family Sync",
+      date: "2026-07-02",
+      status: "scheduled",
+      clinicianName: "Sister Thandeka Kunene",
+      vitals: { bp: "", hr: 0, temp: 0, weight: 0 },
+      lochiaStatus: "Pending evaluation",
+      breastfeedingStatus: "Pending evaluation",
+      neonatalJaundice: "Pending evaluation",
+      doctorNotes: "Ensure first vaccine cycle (BCG/OPV) is recorded in Road to Health card.",
+      tasks: [
+        { label: "Deliver infantile immunization batch #1", done: false },
+        { label: "Assess maternal physical recovery index", done: false },
+        { label: "Hold family planning / contraceptive sync", done: false }
+      ]
+    }
+  ]);
+
+  // Hospital Visits State
+  const [hospitalVisits, setHospitalVisits] = useState<HospitalVisit[]>([
+    {
+      id: "visit-1",
+      patientId: "pat-2",
+      patientName: "Kelebogile Mokgoro",
+      date: "2026-04-10",
+      hospitalName: "Mbabane Primary Maternal Health Centre",
+      reason: "Initial Prenatal Intake & Ultrasound",
+      clinicianName: "Sister Thandeka Kunene",
+      diagnosis: "Gestation confirmed (12 weeks) • Mild morning fatigue",
+      notes: "Baseline lab tests completed: Hb 11.2 g/dL (mild anemia screen), HIV negative, Rh positive. Prescribed standard daily prenatal iron and folic acid supplements.",
+      followUpDate: "2026-05-10"
+    },
+    {
+      id: "visit-2",
+      patientId: "pat-2",
+      patientName: "Kelebogile Mokgoro",
+      date: "2026-05-14",
+      hospitalName: "Mbabane General Hospital",
+      reason: "Anemia Follow-up & Gestational Diabetes Screening",
+      clinicianName: "Dr. Thabo Masuku",
+      diagnosis: "Mild Iron Deficiency Anemia • Normal Glucose Curve",
+      notes: "Hb raised slightly to 11.6 g/dL. Glucose tolerance test fasting level: 4.8 mmol/L (well within safe bounds). Reinforced dietary diversity with local iron-rich foods.",
+      followUpDate: "2026-06-15"
+    }
+  ]);
+
+  const handleAddHospitalVisit = (newVisit: HospitalVisit) => {
+    setHospitalVisits(prev => [newVisit, ...prev]);
+  };
+
+  const handleUpdatePostpartumCheckup = (updated: PostpartumCheckup) => {
+    setPostpartumCheckups(prev => prev.map(c => c.id === updated.id ? updated : c));
+  };
+
+  // Shared Reports State stored in LocalStorage for cross-surface syncing
+  const [sharedReports, setSharedReports] = useState<PatientReport[]>([]);
+  const [maternalMeetings, setMaternalMeetings] = useState<MaternalMeeting[]>([]);
+
+  // Community & Safety States
+  const [communityPosts, setCommunityPosts] = useState<any[]>([]);
+  const [communityComments, setCommunityComments] = useState<any[]>([]);
+  const [safetyAuditLogs, setSafetyAuditLogs] = useState<any[]>([]);
+  const [moderationAppeals, setModerationAppeals] = useState<any[]>([]);
+  const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
+  const [topicNotifications, setTopicNotifications] = useState({
+    nausea: true,
+    movement: true,
+    appointments: true,
+    nutrition: false,
+    labor: true,
+    general: true
+  });
+
+  // Local storage keys
+  const REPORTS_STORAGE_KEY = "vytal_shared_reports_v1";
+  const WEEK_STORAGE_KEY = "vytal_current_week_v1";
+  const POSTS_STORAGE_KEY = "vytal_posts_v1";
+  const COMMENTS_STORAGE_KEY = "vytal_comments_v1";
+  const AUDIT_STORAGE_KEY = "vytal_audit_v1";
+  const APPEALS_STORAGE_KEY = "vytal_appeals_v1";
+  const BLOCKED_STORAGE_KEY = "vytal_blocked_v1";
+  const NOTIF_STORAGE_KEY = "vytal_notif_v1";
+  const MEETINGS_STORAGE_KEY = "vytal_meetings_v1";
+
+  // Feed in clinical vitals list
+  const [vitalsLog, setVitalsLog] = useState<VitalsLog[]>([
+    {
+      id: "v-1",
+      patientId: "pat-2",
+      systolic: 118,
+      diastolic: 75,
+      pulse: 86,
+      temperature: 36.6,
+      weight: 71.5,
+      recordedBy: "Self",
+      createdAt: new Date().toISOString()
+    }
+  ]);
+
+  // General audit helper
+  const addAuditLog = (action: string, targetId: string, targetType: "post" | "comment" | "user", details: string, actor: string = "Kelebogile Mokgoro (Patient)") => {
+    const newEntry = {
+      id: `aud-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      timestamp: new Date().toISOString(),
+      actor,
+      action,
+      targetId,
+      targetType,
+      details
+    };
+    setSafetyAuditLogs(prev => {
+      const updated = [newEntry, ...prev];
+      localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  // Load and pre-populate initial states on startup
+  useEffect(() => {
+    // 1. Get current gestational week sandbox value
+    const savedWeek = localStorage.getItem(WEEK_STORAGE_KEY);
+    if (savedWeek) {
+      setCurrentWeek(Number(savedWeek));
+    }
+
+    // 2. Get saved reports or load beautiful mock reports for active presentation
+    const savedReports = localStorage.getItem(REPORTS_STORAGE_KEY);
+    if (savedReports) {
+      try {
+        setSharedReports(JSON.parse(savedReports));
+      } catch (e) {
+        loadMockInitialReports();
+      }
+    } else {
+      loadMockInitialReports();
+    }
+
+    // 3. Load Community Posts
+    const savedPosts = localStorage.getItem(POSTS_STORAGE_KEY);
+    if (savedPosts) {
+      setCommunityPosts(JSON.parse(savedPosts));
+    } else {
+      const initialPosts = [
+        {
+          id: "pos-1",
+          authorId: "pat-3",
+          authorName: "Nokuthula Zulu",
+          gestationalWeeks: 12,
+          topic: "nausea",
+          content: "Sakubona bomake! Experiencing heavy morning sickness this week. What natural remedies do you use? Is rooibos tea safe?",
+          createdAt: new Date(Date.now() - 3600000 * 5).toISOString(),
+          reportCount: 0,
+          reported: false,
+          blockedUsers: [],
+          isModerated: false
+        },
+        {
+          id: "pos-2",
+          authorId: "pat-5",
+          authorName: "Thandi Mabaso",
+          gestationalWeeks: 31,
+          topic: "movement",
+          content: "Dumela! My baby's flutters are intense around 8 PM. This is my 3rd pregnancy, but it still feels so magical. Anyone else in trimester 3 enjoying kick counts?",
+          createdAt: new Date(Date.now() - 3600000 * 12).toISOString(),
+          reportCount: 0,
+          reported: false,
+          blockedUsers: [],
+          isModerated: false
+        },
+        {
+          id: "pos-3",
+          authorId: "pat-1",
+          authorName: "Zanele Dlamini",
+          gestationalWeeks: 36,
+          topic: "appointments",
+          content: "Just had my regular urine and blood pressure check at Mbabane Medical Centre. The queues are slightly long today, but the midwives are incredibly helpful!",
+          createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
+          reportCount: 0,
+          reported: false,
+          blockedUsers: [],
+          isModerated: false
+        }
+      ];
+      setCommunityPosts(initialPosts);
+      localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(initialPosts));
+    }
+
+    // 4. Load Community Comments
+    const savedComments = localStorage.getItem(COMMENTS_STORAGE_KEY);
+    if (savedComments) {
+      setCommunityComments(JSON.parse(savedComments));
+    } else {
+      const initialComments = [
+        {
+          id: "com-1",
+          postId: "pos-1",
+          authorId: "pat-2",
+          authorName: "Kelebogile Mokgoro",
+          content: "Ginger tea worked wonders for me in trimester 1! Rooibos is wonderful and caffeine-free too.",
+          createdAt: new Date(Date.now() - 3600000 * 4).toISOString(),
+          reportCount: 0,
+          reported: false,
+          isModerated: false
+        },
+        {
+          id: "com-2",
+          postId: "pos-2",
+          authorId: "pat-2",
+          authorName: "Kelebogile Mokgoro",
+          content: "Yes! 28 weeks here, counting 10 kicks is such a lovely bonding time every evening.",
+          createdAt: new Date(Date.now() - 3600000 * 10).toISOString(),
+          reportCount: 0,
+          reported: false,
+          isModerated: false
+        }
+      ];
+      setCommunityComments(initialComments);
+      localStorage.setItem(COMMENTS_STORAGE_KEY, JSON.stringify(initialComments));
+    }
+
+    // 5. Load safety audit logs
+    const savedAudits = localStorage.getItem(AUDIT_STORAGE_KEY);
+    if (savedAudits) {
+      setSafetyAuditLogs(JSON.parse(savedAudits));
+    } else {
+      const initialAudits = [
+        {
+          id: "aud-1",
+          timestamp: new Date(Date.now() - 3600000 * 48).toISOString(),
+          actor: "System Safeguard",
+          action: "UNBLOCK_USER",
+          targetId: "pat-2",
+          targetType: "user",
+          details: "Maternal peer support network initialization complete. Automated anti-spam safeguards armed."
+        }
+      ];
+      setSafetyAuditLogs(initialAudits);
+      localStorage.setItem(AUDIT_STORAGE_KEY, JSON.stringify(initialAudits));
+    }
+
+    // 6. Load moderation appeals
+    const savedAppeals = localStorage.getItem(APPEALS_STORAGE_KEY);
+    if (savedAppeals) {
+      setModerationAppeals(JSON.parse(savedAppeals));
+    } else {
+      const initialAppeals = [
+        {
+          id: "app-1",
+          userId: "pat-1",
+          userName: "Zanele Dlamini",
+          targetId: "pos-revoked-0",
+          targetType: "post",
+          targetContent: "Recommend specific unapproved medical injections on the forum.",
+          reason: "I was only repeating what a pharmacist mentioned to me. I now understand that Vytal peer spaces require clinical coordination directly.",
+          timestamp: new Date(Date.now() - 3600000 * 20).toISOString(),
+          status: "pending"
+        }
+      ];
+      setModerationAppeals(initialAppeals);
+      localStorage.setItem(APPEALS_STORAGE_KEY, JSON.stringify(initialAppeals));
+    }
+
+    // 7. Load blocked users list
+    const savedBlocked = localStorage.getItem(BLOCKED_STORAGE_KEY);
+    if (savedBlocked) {
+      setBlockedUsers(JSON.parse(savedBlocked));
+    }
+
+    // 8. Load topic notification settings
+    const savedNotifs = localStorage.getItem(NOTIF_STORAGE_KEY);
+    if (savedNotifs) {
+      setTopicNotifications(JSON.parse(savedNotifs));
+    }
+
+    // 9. Load maternal telemedicine meetings
+    const savedMeetings = localStorage.getItem(MEETINGS_STORAGE_KEY);
+    if (savedMeetings) {
+      try {
+        setMaternalMeetings(JSON.parse(savedMeetings));
+      } catch (e) {
+        setMaternalMeetings([]);
+      }
+    } else {
+      const initialMeetings: MaternalMeeting[] = [
+        {
+          id: "meet-01",
+          patientId: "pat-2",
+          patientName: "Kelebogile Mokgoro",
+          clinicianName: "Sister Thandeka Kunene",
+          meetingUri: "https://meet.google.com/abc-defg-hij",
+          meetingCode: "abc-defg-hij",
+          topic: "Pre-eclampsia Risk & Vitals Review",
+          scheduledFor: new Date(Date.now() + 3600000 * 2).toISOString(), // in 2 hours
+          status: "upcoming",
+          createdAt: new Date().toISOString()
+        }
+      ];
+      setMaternalMeetings(initialMeetings);
+      localStorage.setItem(MEETINGS_STORAGE_KEY, JSON.stringify(initialMeetings));
+    }
+  }, []);
+
+  // Synchronize scheduled Maternal Meetings with Firestore
+  useEffect(() => {
+    if (!isFirebaseConfigured) return;
+    try {
+      const unsubscribe = onSnapshot(collection(db, "meetings"), (snapshot) => {
+        const remoteMeetings: MaternalMeeting[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          remoteMeetings.push({
+            id: docSnap.id,
+            patientId: data.patientId,
+            patientName: data.patientName,
+            clinicianName: data.clinicianName,
+            meetingUri: data.meetingUri,
+            meetingCode: data.meetingCode,
+            topic: data.topic,
+            scheduledFor: data.scheduledFor,
+            status: data.status,
+            createdAt: data.createdAt
+          });
+        });
+        if (remoteMeetings.length > 0) {
+          setMaternalMeetings(remoteMeetings);
+          localStorage.setItem(MEETINGS_STORAGE_KEY, JSON.stringify(remoteMeetings));
+        }
+      }, (error) => {
+        handleFirestoreError(error, OperationType.GET, "meetings");
+      });
+      return () => unsubscribe();
+    } catch (error) {
+      console.error("Error setting up real-time meetings collection listener:", error);
+    }
+  }, []);
+
+  const loadMockInitialReports = () => {
+    const initialReports: PatientReport[] = [
+      {
+        id: "rep-1",
+        patientId: "pat-2",
+        patientName: "Kelebogile Mokgoro",
+        gestationalWeeks: 28,
+        symptom: "Severe headache",
+        severity: "Monitor",
+        description: "I have been experiencing a dull headache for 2 days now, and my fingers are swollen. Recorded this symptom through Ask Vytal. Please follow up.",
+        voiceNoteSimulated: true,
+        status: "pending",
+        createdAt: new Date(Date.now() - 3600000 * 2.5).toISOString() // 2.5 hours ago
+      },
+      {
+        id: "rep-2",
+        patientId: "pat-1",
+        patientName: "Zanele Dlamini",
+        gestationalWeeks: 36,
+        symptom: "Flashes in vision",
+        severity: "Referral",
+        description: "Seeing small sparkle spots when looking around. My self-recorded Blood pressure reading was 158/110.",
+        voiceNoteSimulated: false,
+        status: "reviewed",
+        clinicianNotes: "Please report directly to Mbabane Primary Centre immediately! Blurry vision combined with high blood pressure is a key warning sign of severe pre-eclampsia.",
+        clinicianAction: "Refer to care",
+        createdAt: new Date(Date.now() - 3600000 * 24).toISOString() // 1 day ago
+      }
+    ];
+    setSharedReports(initialReports);
+    localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(initialReports));
+  };
+
+  // Community action handlers
+  const handleAddPost = (post: { topic: any; content: string }) => {
+    const newPost = {
+      id: `pos-${Date.now()}`,
+      authorId: "pat-2",
+      authorName: "Kelebogile Mokgoro",
+      gestationalWeeks: currentWeek,
+      topic: post.topic,
+      content: post.content,
+      createdAt: new Date().toISOString(),
+      reportCount: 0,
+      reported: false,
+      blockedUsers: [],
+      isModerated: false
+    };
+
+    setCommunityPosts(prev => {
+      const updated = [newPost, ...prev];
+      localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+
+    addAuditLog("REPORT_POST", newPost.id, "post", `Post created on topic ${post.topic}: "${post.content.substring(0, 30)}..."`);
+  };
+
+  const handleAddComment = (postId: string, content: string) => {
+    const newComment = {
+      id: `com-${Date.now()}`,
+      postId,
+      authorId: "pat-2",
+      authorName: "Kelebogile Mokgoro",
+      content,
+      createdAt: new Date().toISOString(),
+      reportCount: 0,
+      reported: false,
+      isModerated: false
+    };
+
+    setCommunityComments(prev => {
+      const updated = [...prev, newComment];
+      localStorage.setItem(COMMENTS_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+
+    addAuditLog("REPORT_COMMENT", newComment.id, "comment", `Comment added to post #${postId}: "${content.substring(0, 30)}..."`);
+  };
+
+  const handleReportPost = (postId: string, reason: string) => {
+    setCommunityPosts(prev => {
+      const updated = prev.map(p => {
+        if (p.id === postId) {
+          const reportCount = (p.reportCount || 0) + 1;
+          return { ...p, reported: true, reportCount, reportedReason: reason };
+        }
+        return p;
+      });
+      localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+
+    addAuditLog("REPORT_POST", postId, "post", `Reported post with reason: "${reason}"`);
+  };
+
+  const handleReportComment = (commentId: string, reason: string) => {
+    setCommunityComments(prev => {
+      const updated = prev.map(c => {
+        if (c.id === commentId) {
+          const reportCount = (c.reportCount || 0) + 1;
+          return { ...c, reported: true, reportCount, reportedReason: reason };
+        }
+        return c;
+      });
+      localStorage.setItem(COMMENTS_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+
+    addAuditLog("REPORT_COMMENT", commentId, "comment", `Reported comment with reason: "${reason}"`);
+  };
+
+  const handleBlockUser = (userId: string, userName: string) => {
+    setBlockedUsers(prev => {
+      if (prev.includes(userId)) return prev;
+      const updated = [...prev, userId];
+      localStorage.setItem(BLOCKED_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+
+    addAuditLog("BLOCK_USER", userId, "user", `User blocked: "${userName}"`);
+  };
+
+  const handleUnblockUser = (userId: string, userName: string) => {
+    setBlockedUsers(prev => {
+      const updated = prev.filter(uid => uid !== userId);
+      localStorage.setItem(BLOCKED_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+
+    addAuditLog("UNBLOCK_USER", userId, "user", `User unblocked: "${userName}"`);
+  };
+
+  const handleSubmitAppeal = (appealData: { targetType: "post" | "comment" | "user"; reason: string; content: string }) => {
+    const newAppeal = {
+      id: `app-${Date.now()}`,
+      userId: "pat-2",
+      userName: "Kelebogile Mokgoro",
+      targetId: `item-${Date.now()}`,
+      targetType: appealData.targetType,
+      targetContent: appealData.content,
+      reason: appealData.reason,
+      timestamp: new Date().toISOString(),
+      status: "pending" as const
+    };
+
+    setModerationAppeals(prev => {
+      const updated = [newAppeal, ...prev];
+      localStorage.setItem(APPEALS_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+
+    addAuditLog("APPEAL_SUBMIT", newAppeal.id, "user", `Appeal filed for ${appealData.targetType}: "${appealData.reason.substring(0, 30)}..."`);
+  };
+
+  const handleResolveAppeal = (appealId: string, status: "approved" | "rejected", moderatorNotes: string) => {
+    const actorName = sessionClinician ? `${sessionClinician.name} (Clinician)` : "Sister Thandeka Kunene (Clinician)";
+    
+    setModerationAppeals(prev => {
+      const updated = prev.map(app => {
+        if (app.id === appealId) {
+          return { ...app, status, moderatorNotes };
+        }
+        return app;
+      });
+      localStorage.setItem(APPEALS_STORAGE_KEY, JSON.stringify(updated));
+      return updated;
+    });
+
+    addAuditLog("APPEAL_RESOLVE", appealId, "user", `Appeal resolved to ${status.toUpperCase()}. Notes: "${moderatorNotes}"`, actorName);
+  };
+
+  const handleToggleModeratePost = (postId: string, isComment: boolean = false) => {
+    const actorName = sessionClinician ? `${sessionClinician.name} (Clinician)` : "Sister Thandeka Kunene (Clinician)";
+    
+    if (isComment) {
+      setCommunityComments(prev => {
+        const updated = prev.map(c => {
+          if (c.id === postId) {
+            const nextModerateState = !c.isModerated;
+            addAuditLog(nextModerateState ? "REPORT_COMMENT" : "UNBLOCK_USER", c.id, "comment", `Comment moderated status set to ${nextModerateState}`, actorName);
+            return { ...c, isModerated: nextModerateState };
+          }
+          return c;
+        });
+        localStorage.setItem(COMMENTS_STORAGE_KEY, JSON.stringify(updated));
+        return updated;
+      });
+    } else {
+      setCommunityPosts(prev => {
+        const updated = prev.map(p => {
+          if (p.id === postId) {
+            const nextModerateState = !p.isModerated;
+            addAuditLog(nextModerateState ? "REPORT_POST" : "UNBLOCK_USER", p.id, "post", `Post moderated status set to ${nextModerateState}`, actorName);
+            return { ...p, isModerated: nextModerateState };
+          }
+          return p;
+        });
+        localStorage.setItem(POSTS_STORAGE_KEY, JSON.stringify(updated));
+        return updated;
+      });
+    }
+  };
+
+  const handleUpdateTopicNotifications = (levels: any) => {
+    setTopicNotifications(levels);
+    localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(levels));
+  };
+
+  // Schedule a real telehealth clinic session with Google Meet
+  const handleScheduleMeeting = async (patientId: string, patientName: string, topic: string, scheduledFor: string, meetingUri: string, meetingCode: string) => {
+    const newMeeting: MaternalMeeting = {
+      id: `meet-${Date.now()}`,
+      patientId,
+      patientName,
+      clinicianName: sessionClinician?.name || "Sister Thandeka Kunene",
+      meetingUri,
+      meetingCode,
+      topic,
+      scheduledFor,
+      status: "upcoming",
+      createdAt: new Date().toISOString()
+    };
+
+    const updated = [newMeeting, ...maternalMeetings];
+    setMaternalMeetings(updated);
+    localStorage.setItem(MEETINGS_STORAGE_KEY, JSON.stringify(updated));
+
+    // Upload to Firebase if available
+    if (isFirebaseConfigured) {
+      try {
+        await setDoc(doc(db, "meetings", newMeeting.id), newMeeting);
+      } catch (error) {
+        console.error("Error uploading telehealth meeting to Firebase:", error);
+      }
+    }
+  };
+
+  // Safe week sandboxing sync writer
+  const handleSetCurrentWeek = (week: number) => {
+    setCurrentWeek(week);
+    localStorage.setItem(WEEK_STORAGE_KEY, String(week));
+  };
+
+  // Add reports submitted from Mother App (Surface B)
+  const handleAddReport = (reportData: Omit<PatientReport, "id" | "createdAt" | "status">) => {
+    const newReport: PatientReport = {
+      ...reportData,
+      id: `rep-${Date.now()}`,
+      status: "pending",
+      createdAt: new Date().toISOString()
+    };
+    
+    const updated = [newReport, ...sharedReports];
+    setSharedReports(updated);
+    localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(updated));
+  };
+
+  // Review reports annotated from Clinic Workspace (Surface C)
+  const handleReviewReport = (reportId: string, action: "Normal" | "Monitor" | "Refer to care", notes: string) => {
+    const updated = sharedReports.map(rep => {
+      if (rep.id === reportId) {
+        return {
+          ...rep,
+          status: "reviewed" as const,
+          clinicianAction: action,
+          clinicianNotes: notes
+        };
+      }
+      return rep;
+    });
+    
+    setSharedReports(updated);
+    localStorage.setItem(REPORTS_STORAGE_KEY, JSON.stringify(updated));
+  };
+
+  // 1-Click bypass login bypass for clinical assessors
+  const handleBypassClinicianLogin = (role: "clinician" | "admin" | "CHW") => {
+    const clinicianAccount: Clinician = {
+      uid: "cli-st-01",
+      email: "thandeka.kunene@vytalbridge.org",
+      name: "Sister Thandeka Kunene",
+      role: role,
+      clinicId: "mbabane-primary"
+    };
+    setSessionClinician(clinicianAccount);
+    setLoginError(null);
+  };
+
+  const handleManualLoginSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoggingIn(true);
+    setLoginError(null);
+    setShouldShake(false);
+
+    setTimeout(() => {
+      setIsLoggingIn(false);
+      if (loginEmail.endsWith("@vytalbridge.org")) {
+        handleBypassClinicianLogin("clinician");
+      } else {
+        setLoginError("Invalid regional credential node. Use the 1-Click bypass for clinical review demonstrations.");
+        setShouldShake(true);
+        // Reset shouldShake after animation finishes
+        setTimeout(() => setShouldShake(false), 500);
+      }
+    }, 1200);
+  };
+
+  const handleLogout = () => {
+    setSessionClinician(null);
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-[#FDF1EA] via-[#F8D7E0] to-[#DCEEE3] flex flex-col text-[#2B1B2E] font-sans selection:bg-pink-200">
+      
+      {/* 1. Global SADC SADC System indicator bar */}
+      <div className="bg-[#2B1B2E] text-white text-[10px] px-6 py-2 flex flex-col sm:flex-row justify-between items-center gap-2 border-b border-white/5 z-50">
+        <div className="flex items-center gap-2">
+          {isOfflineMode ? (
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+          ) : (
+            <span className="w-1.5 h-1.5 rounded-full bg-[#FF6FB1] animate-ping"></span>
+          )}
+          <span className="font-semibold uppercase tracking-wider">
+            {isOfflineMode 
+              ? "⚠️ Offline Mode Simulating: Local Sync Registry Enabled (Offline Queue Monitoring Active)"
+              : "Maternal Telehealth Node Sync Active: Mbabane, Eswatini"
+            }
+          </span>
+        </div>
+        <div className="flex items-center gap-4 font-bold">
+          <button 
+            type="button"
+            onClick={() => setIsOfflineMode(prev => !prev)}
+            className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border cursor-pointer transition-all flex items-center gap-1.5 ${
+              isOfflineMode 
+                ? "bg-amber-500/20 text-amber-300 border-amber-500/50 hover:bg-amber-500/30" 
+                : "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 hover:bg-emerald-500/30"
+            }`}
+            title="Toggle offline-first sandbox database simulation"
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${isOfflineMode ? "bg-amber-400" : "bg-emerald-400"}`}></span>
+            <span>{isOfflineMode ? "OFFLINE ACTIVE" : "GO OFFLINE"}</span>
+          </button>
+          <span className="opacity-80">🛡️ SADC DP-POPIA COMPLIANT</span>
+          <span className="opacity-80">📡 LOCAL CACHE ACTIVE</span>
+        </div>
+      </div>
+
+      {/* 2. Primary Layout Switcher floating navigational bar (Vytal Bridge Showcase Portal) */}
+      <nav className="glass-panel-heavy sticky top-0 px-6 py-3.5 flex flex-wrap gap-4 items-center justify-between z-40 shadow-xs border-b border-white/30">
+        
+        {/* Brand logo details */}
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 bg-gradient-to-br from-[#FF6FB1] to-[#E84FA0] rounded-2xl flex items-center justify-center text-white shadow-md">
+            <ActivitySquare className="w-5 h-5" />
+          </div>
+          <div className="text-left">
+            <h1 className="text-base font-black tracking-tighter leading-none text-[#2B1B2E] uppercase">
+              Vytal<span className="text-[#FF6FB1]">Bridge</span>
+            </h1>
+            <span className="text-[10px] text-[#7A6B72] font-semibold block mt-0.5">Maternal Early-Warning Triage</span>
+          </div>
+        </div>
+
+        {/* Center pill selectors */}
+        <div className="flex bg-[#FFF1EE] p-0.5 rounded-xl border border-white/40 shadow-inner">
+          <button
+            onClick={() => setActiveSurface("landing")}
+            className={`flex items-center gap-1 bg-transparent py-2 px-3 rounded-lg text-xs font-black transition-all cursor-pointer ${activeSurface === "landing" ? "vytal-btn-gradient text-white shadow-md scale-102" : "text-[#7A6B72] hover:text-[#2B1B2E]"}`}
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Marketing Page</span>
+          </button>
+          
+          <button
+            onClick={() => setActiveSurface("patient")}
+            className={`flex items-center gap-1 bg-transparent py-2 px-3 rounded-lg text-xs font-black transition-all cursor-pointer ${activeSurface === "patient" ? "vytal-btn-gradient text-white shadow-md scale-102" : "text-[#7A6B72] hover:text-[#2B1B2E]"}`}
+          >
+            <Smartphone className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Mother App</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSurface("clinician")}
+            className={`flex items-center gap-1 bg-transparent py-2 px-3 rounded-lg text-xs font-black transition-all cursor-pointer ${activeSurface === "clinician" ? "vytal-btn-gradient text-white shadow-md scale-102" : "text-[#7A6B72] hover:text-[#2B1B2E]"}`}
+          >
+            <Stethoscope className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Doctor Hub</span>
+          </button>
+        </div>
+
+        {/* Callouts */}
+        <div className="hidden lg:flex items-center gap-2">
+          <div className="text-right text-[9.5px] font-semibold leading-none">
+            <span className="text-[#7A6B72]">Regional Coordinator:</span>
+            <span className="block font-black text-[#2B1B2E]">Sister Thandeka Kunene</span>
+          </div>
+          <span className="text-xl filter saturate-120">🩺</span>
+        </div>
+      </nav>
+
+      {/* 3. Surface Mapping Engine Rendered Content */}
+      <main className="flex-1 p-6 max-w-7xl w-full mx-auto pb-24">
+        
+        {/* ====================================================
+            SURFACE A: MARKETING PORTAL
+            ==================================================== */}
+        {activeSurface === "landing" && (
+          <div className="space-y-16 animate-fade-in text-left font-sans">
+            
+            {/* Beautiful Hero Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center pt-6">
+              
+              <div className="lg:col-span-7 space-y-6">
+                
+                <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase bg-pink-100 text-[#E84FA0] px-3.5 py-1 rounded-full border border-[#FF6FB1]/20 shadow-xs">
+                  <Sparkles className="w-3 h-3 text-[#FF6FB1] animate-spin" style={{ animationDuration: '4s' }} /> Built for expecting mothers in Africa
+                </span>
+
+                <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-[#2B1B2E] uppercase leading-none">
+                  Every mother deserves a <span className="text-[#E84FA0]">trusted health</span> companion.
+                </h1>
+
+                <p className="text-base text-[#7A6B72] leading-relaxed max-w-xl font-medium">
+                  Empowering maternal care across African communities with offline-first, multilingual voice triage, unified physical milestone tracking, and linked clinician oversight.
+                </p>
+
+                <div className="flex flex-wrap gap-4 pt-2">
+                  <button
+                    onClick={() => setActiveSurface("patient")}
+                    className="vytal-btn-gradient text-white font-extrabold text-sm px-6 py-3.5 rounded-2xl cursor-pointer hover:shadow-lg transition-all scale-100 hover:scale-[1.02] flex items-center gap-1.5 shadow-md"
+                  >
+                    <Smartphone className="w-4 h-4" />
+                    <span>Demo Patient Companion App</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveSurface("clinician")}
+                    className="bg-white/80 border border-[#FF6FB1]/30 text-[#E84FA0] font-extrabold text-sm px-6 py-3.5 rounded-2xl cursor-pointer hover:bg-white transition-all shadow-xs"
+                  >
+                    Medical Clinician Portal
+                  </button>
+                </div>
+
+                {/* Chips trust row */}
+                <div className="flex flex-wrap gap-2.5 pt-4">
+                  {["Voice-first Guidance", "Works Completely Offline", "Regional DPA Compliant", "African Languages Integrated"].map((ch) => (
+                    <span 
+                      key={ch} 
+                      className="text-[10px] font-black text-[#2B1B2E] bg-white/50 backdrop-blur-md px-3.5 py-2 border border-white/50 rounded-xl shadow-3xs flex items-center gap-1.5"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5 text-[#E84FA0]" />
+                      <span>{ch}</span>
+                    </span>
+                  ))}
+                </div>
+
+              </div>
+
+              {/* Right column: glowing framed clinician photo block */}
+              <div className="lg:col-span-5 flex justify-center">
+                <div className="p-4 bg-white/40 border border-white/50 rounded-3xl backdrop-blur-xl relative shadow-md w-full max-w-sm">
+                  
+                  {/* Decorative glowing sphere background */}
+                  <div className="absolute inset-x-0 bottom-1/2 translate-y-1/2 w-48 h-48 bg-gradient-to-r from-[#FF6FB1] to-[#E84FA0] opacity-10 rounded-full blur-2xl filter z-0 mx-auto"></div>
+
+                  <div className="rounded-2xl overflow-hidden bg-emerald-50 border border-white/60 shadow-xs h-96 relative z-10 flex items-center justify-center">
+                    <img 
+                      src="/src/assets/images/maternal_baby_stages_1781801156793.jpg" 
+                      alt="Clinician Telehealth"
+                      referrerPolicy="no-referrer"
+                      className="w-full h-full object-cover scale-105"
+                    />
+                  </div>
+
+                  {/* Absolute overlaid clinical metrics widget */}
+                  <div className="absolute -bottom-4 left-6 right-6 bg-white/95 backdrop-blur-sm p-3 border border-white rounded-2xl shadow-lg z-20 text-left space-y-1">
+                    <span className="text-[8px] font-bold text-[#E84FA0] uppercase block">Platform Doctor Coverage</span>
+                    <h4 className="text-xs font-black text-[#2B1B2E] tracking-tight truncate leading-none uppercase">Assigned Clinic Center</h4>
+                    <p className="text-[9.5px] text-[#7A6B72] font-semibold leading-normal">Mbabane Primary Maternal Health Centre, Eswatini</p>
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
+
+            {/* How it Works cards info */}
+            <div className="space-y-6 pt-8">
+              <div className="text-center space-y-1 max-w-sm mx-auto">
+                <h2 className="text-xs font-black text-[#E84FA0] uppercase tracking-widest">Interactive Operational Channels</h2>
+                <h3 className="text-xl font-black text-[#2B1B2E] uppercase">How Vytal Bridge Operates</h3>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                {/* Channel 1 */}
+                <div className="p-5 bg-white/40 border border-white/50 rounded-3xl space-y-3 shadow-xs">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-pink-100 to-amber-100 flex items-center justify-center font-bold text-sm text-[#E84FA0] shadow-3xs">
+                    01
+                  </div>
+                  <h4 className="font-extrabold text-sm uppercase text-[#2B1B2E]">Speak Your Symptoms</h4>
+                  <p className="text-xs text-[#7A6B72] font-semibold leading-relaxed">
+                    Mothers can discuss physical symptoms or ask medical inquiries hands-free using Ask Vytal. Voice recognition parses English, siSwati, and Setswana inputs instantly.
+                  </p>
+                </div>
+
+                {/* Channel 2 */}
+                <div className="p-5 bg-white/40 border border-white/50 rounded-3xl space-y-3 shadow-xs">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-pink-100 to-amber-100 flex items-center justify-center font-bold text-sm text-[#E84FA0] shadow-3xs">
+                    02
+                  </div>
+                  <h4 className="font-extrabold text-sm uppercase text-[#2B1B2E]">Instant Triaged Evaluation</h4>
+                  <p className="text-xs text-[#7A6B72] font-semibold leading-relaxed">
+                    A local offline diagnostic system classifies clinical parameters into risk ratings and generates trimester-specific guidelines on the spot.
+                  </p>
+                </div>
+
+                {/* Channel 3 */}
+                <div className="p-5 bg-white/40 border border-white/50 rounded-3xl space-y-3 shadow-xs">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-r from-pink-100 to-amber-100 flex items-center justify-center font-bold text-sm text-[#E84FA0] shadow-3xs">
+                    03
+                  </div>
+                  <h4 className="font-extrabold text-sm uppercase text-[#2B1B2E]">Clinician Follow-ups</h4>
+                  <p className="text-xs text-[#7A6B72] font-semibold leading-relaxed">
+                    Once synced, case reports appear as critical triage alerts on Clinician Workspace. Specialists review trends and return clinical instructions directly.
+                  </p>
+                </div>
+
+              </div>
+            </div>
+
+            {/* Comprehensive Feature Grid */}
+            <div className="p-6 bg-white/35 backdrop-blur-xl border border-white/50 rounded-3xl space-y-6">
+              <div className="text-left">
+                <span className="text-[8px] font-bold text-[#E84FA0] uppercase block">SADC Maternal Health Suite</span>
+                <h3 className="text-lg font-black text-[#2B1B2E] uppercase">Core Platform Features</h3>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[
+                  { title: "Weekly Pregnancy stages", desc: "Interactive trimester timeline showcasing size parameters and critical biochemical milestones." },
+                  { title: "Clinical Recharts trends", desc: "Detailed timeline of maternal pulse, blood pressure, coretemperature, and weight over time." },
+                  { title: "Multilingual Speech Assist", desc: "Voice transcription supporting three official Southern African languages: English, siSwati, and Setswana." },
+                  { title: "Secure Case Reports Flow", desc: "Interactive cross-surface reporting enqueuing warnings, alerts, and clinician-provided advice notes." },
+                  { title: "Consent and POPIA Safety", desc: "Fully monitored consent registry that locks data security protocols under SADC privacy legislation guidelines." },
+                  { title: "Offline Synced Fallbacks", desc: "Fully functioning LocalStorage database fallbacks for remote clinics with poor coverage." }
+                ].map((feat, index) => (
+                  <div key={index} className="p-4 bg-white/60 border border-white/50 rounded-2xl text-left space-y-1.5 shadow-3xs hover:bg-white transition-colors">
+                    <span className="text-xs font-extrabold uppercase text-[#2B1B2E]">{feat.title}</span>
+                    <p className="text-[11px] text-[#7A6B72] font-semibold leading-normal">{feat.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 1. COMPREHENSIVE AFRICAN & RARE PREGNANCY CONDITIONS AWARENESS HUB */}
+            <div className="p-6 bg-[#FCF8F5] border border-pink-200/50 rounded-3xl space-y-6 shadow-xs animate-fade-in" id="african-maternal-awareness-panel">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-pink-100 pb-4">
+                <div className="text-left">
+                  <span className="text-[9px] font-black uppercase text-rose-600 bg-rose-50 border border-rose-100 px-3 py-1 rounded-full tracking-wider">
+                    SADC CLINICAL CAMPAIGN
+                  </span>
+                  <h3 className="text-xl font-black text-[#2B1B2E] uppercase mt-1.5">
+                    African & Rare Pregnancy Conditions Awareness Hub
+                  </h3>
+                  <p className="text-xs text-[#7A6B72] font-medium leading-relaxed mt-0.5 max-w-2xl">
+                    Every mother deserves access to life-saving clinical knowledge. Explore regional prevalence, critical warning signs, and precautions for high-risk and rare pregnancy disorders.
+                  </p>
+                </div>
+                
+                {/* Visual stats mini board */}
+                <div className="p-3 bg-white border border-pink-100 rounded-2xl shadow-3xs flex items-center gap-2.5 shrink-0 self-stretch md:self-auto text-left">
+                  <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 font-bold text-sm">
+                    ⚠️
+                  </div>
+                  <div className="leading-none">
+                    <p className="text-[14px] font-black text-[#2B1B2E]">Over 30%</p>
+                    <span className="text-[8.5px] text-[#7A6B72] font-semibold block mt-0.5">SADC gestations carry hidden risks</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Functional interactive grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                
+                {/* Left hand vertical condition selectors */}
+                <div className="lg:col-span-4 flex flex-col gap-1.5 font-sans">
+                  <span className="text-[8.5px] font-extrabold uppercase text-[#4F7066] tracking-widest text-left mb-1 block">
+                    Select a Condition to Examine
+                  </span>
+                  {(() => {
+                    return awarenessConditions.map((cond) => {
+                      const isSelected = cond.id === activeAwarenessId;
+                      return (
+                        <button
+                          key={cond.id}
+                          type="button"
+                          onClick={() => setActiveAwarenessId(cond.id)}
+                          className={`w-full p-3.5 rounded-2xl border text-left transition-all flex items-center gap-3 cursor-pointer ${
+                            isSelected
+                              ? "bg-white border-[#FF6FB1] text-[#E84FA0] shadow-xs scale-[1.01]"
+                              : "bg-white/60 border-neutral-150 hover:bg-white text-[#2B1B2E]"
+                          }`}
+                        >
+                          <span className="w-8 h-8 rounded-xl bg-neutral-100 border border-white/60 flex items-center justify-center text-base shrink-0 shadow-3xs">
+                            {cond.icon}
+                          </span>
+                          <div className="leading-tight text-left">
+                            <p className="text-[11px] font-black leading-tight">{cond.name}</p>
+                            <span className="text-[8px] text-[#7A6B72] font-semibold mt-0.5 line-clamp-1 block">
+                              {cond.id === "ppcm" || cond.id === "afe" ? "Rare Disorder" : "Regional Prevalence"}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    });
+                  })()}
+                </div>
+
+                {/* Right hand expanding details board */}
+                <div className="lg:col-span-8 bg-white border border-pink-100 rounded-3xl p-5 md:p-6 space-y-4 text-left shadow-3xs relative overflow-hidden">
+                  
+                  {/* Visual ambient pink gradient element */}
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-[#FF6FB1]/5 to-transparent rounded-full pointer-events-none"></div>
+
+                  {(() => {
+                    const activeAwarenessCond = awarenessConditions.find(c => c.id === activeAwarenessId) || awarenessConditions[0];
+                    return (
+                      <>
+                        {/* Active selected heading and statistics */}
+                        <div className="space-y-1.5 relative z-10 border-b border-dashed border-neutral-100 pb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xl">{activeAwarenessCond.icon}</span>
+                            <h4 className="text-base font-extrabold uppercase text-[#2B1B2E] leading-none">
+                              {activeAwarenessCond.name}
+                            </h4>
+                          </div>
+                          <div className="bg-rose-50/50 border border-rose-100/40 p-2.5 rounded-xl text-[9.5px] leading-relaxed text-rose-950 font-semibold flex gap-2">
+                            <span className="text-rose-600 font-extrabold text-xs shrink-0 mt-0.5">⚕️</span>
+                            <div>
+                              <strong className="text-rose-900">Regional Impact Factor: </strong>
+                              {activeAwarenessCond.prevalence}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Description */}
+                        <p className="text-xs text-[#5F716A] leading-relaxed font-semibold">
+                          {activeAwarenessCond.desc}
+                        </p>
+
+                        {/* Red flags and precautions nested details columns */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                          
+                          {/* Red warning signals panel */}
+                          <div className="p-4 bg-rose-50/20 border border-rose-100 rounded-2xl space-y-2">
+                            <span className="text-[9px] font-black uppercase text-rose-700 tracking-wider flex items-center gap-1">
+                              🚨 Warning red flags
+                            </span>
+                            <ul className="space-y-1.5">
+                              {activeAwarenessCond.signals.map((sig, sIdx) => (
+                                <li key={sIdx} className="text-[10px] text-[#2B1B2E] font-semibold flex items-start gap-1.5 leading-snug">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0 mt-1.5"></span>
+                                  <span>{sig}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+
+                          {/* Green precautions panel */}
+                          <div className="p-4 bg-emerald-50/20 border border-emerald-100 rounded-2xl space-y-2">
+                            <span className="text-[9px] font-black uppercase text-emerald-700 tracking-wider flex items-center gap-1">
+                              🛡️ Clinical Precautions
+                            </span>
+                            <ul className="space-y-1.5">
+                              {activeAwarenessCond.precautions.map((prec, pIdx) => (
+                                <li key={pIdx} className="text-[10px] text-[#2B1B2E] font-semibold flex items-start gap-1.5 leading-snug">
+                                  <span className="text-emerald-700 font-extrabold text-[10px] shrink-0 mt-0.5">✓</span>
+                                  <span>{prec}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+
+                        </div>
+
+                        {/* Action box: How Vytal empowers clinicians and patients to react */}
+                        <div className="bg-[#FFF9F6] border border-[#FF6FB1]/20 p-3.5 rounded-2xl flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                          <div className="w-9 h-9 rounded-xl bg-pink-100 flex items-center justify-center text-sm shrink-0">
+                            🔗
+                          </div>
+                          <div className="leading-tight text-left">
+                            <strong className="text-[10px] uppercase font-black tracking-wider text-[#E84FA0] block">
+                              How Vytal Bridges The Gap:
+                            </strong>
+                            <p className="text-[10px] text-[#7A6B72] font-semibold leading-normal mt-0.5">
+                              {activeAwarenessCond.howVytalHelps}
+                            </p>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+
+                </div>
+
+              </div>
+            </div>
+
+            {/* 2. MATERNAL SUCCESS STORIES & TESTIMONIALS SECTION */}
+            <div className="space-y-6 pt-6" id="maternal-testimonials-section">
+              <div className="text-center space-y-1">
+                <span className="text-[9px] font-black text-[#E84FA0] uppercase tracking-widest block">
+                  REAL STORIES, REAL SAVED LIVES
+                </span>
+                <h3 className="text-xl font-black text-[#2B1B2E] uppercase">
+                  Testimonials from our SADC Mothers
+                </h3>
+                <p className="text-xs text-[#7A6B72] max-w-lg mx-auto font-semibold leading-relaxed">
+                  Discover how our offline-first voice triage, connected medical networks, and interactive pregnancy education protect pregnant lives across remote communities.
+                </p>
+              </div>
+
+              {/* Elegant dual horizontal testimonials layout */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
+                
+                {/* Success Story A */}
+                <div className="p-5 bg-white/40 border border-white/50 rounded-3xl flex flex-col justify-between space-y-4 shadow-xs text-left relative overflow-hidden group hover:bg-white transition-all">
+                  <div className="space-y-4">
+                    {/* Mother pregnancy picture block */}
+                    <div className="h-60 rounded-2xl overflow-hidden bg-rose-50 border border-white/60 relative shadow-3xs">
+                      <img 
+                        src="/src/assets/images/successful_mother_1781975583165.jpg" 
+                        alt="Siphelele Mamba holding baby"
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-350"
+                      />
+                      <div className="absolute top-3 left-3 bg-[#2B1B2E]/90 text-white text-[8px] font-black tracking-wider uppercase px-2.5 py-1 rounded-full border border-white/20 flex items-center gap-1">
+                        <span>🇸🇿</span> PIGGS PEAK, ESWATINI • SUCCESS STORY
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-black uppercase text-[#2B1B2E] leading-snug">
+                        “ Swollen Ankles & Early Triage Alerts Saved My Baby's Life ”
+                      </h4>
+                      <p className="text-[11px] text-[#7A6B72] font-semibold leading-relaxed italic">
+                        "In my 32nd week of pregnancy, my ankles swelled up excessively overnight. I was tempted to ignore it, but I logged the physical changes inside Ask Vytal. The platform raised an immediate alert for Pre-Eclampsia and automatically synchronized it with the clinical database. Dr. Masuku called me within an hour. They admitted me early, controlled my high blood pressure, and delivered a healthy baby girl. Waiting even two context-less days could have been fatal."
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-2.5 border-t border-dashed border-neutral-200/50 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center font-black text-xs text-emerald-800">
+                      SM
+                    </div>
+                    <div className="leading-none text-left font-sans">
+                      <p className="text-[10px] font-extrabold text-[#2B1B2E]">Siphelele Mamba, 29</p>
+                      <span className="text-[8.5px] text-[#7A6B72] font-extrabold block mt-0.5">Primary Referral Patient • Mother of Baby Temswati</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Success Story B */}
+                <div className="p-5 bg-white/40 border border-white/50 rounded-3xl flex flex-col justify-between space-y-4 shadow-xs text-left relative overflow-hidden group hover:bg-white transition-all">
+                  <div className="space-y-4">
+                    {/* Mother pregnancy picture block */}
+                    <div className="h-60 rounded-2xl overflow-hidden bg-rose-50 border border-white/60 relative shadow-3xs">
+                      <img 
+                        src="/src/assets/images/pregnant_advice_1781975600218.jpg" 
+                        alt="Lerato Molefe looking at app screen"
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-350"
+                      />
+                      <div className="absolute top-3 left-3 bg-[#2B1B2E]/90 text-white text-[8px] font-black tracking-wider uppercase px-2.5 py-1 rounded-full border border-white/20 flex items-center gap-1">
+                        <span>🇧🇼</span> LOBATSE, BOTSWANA • CLINICAL CONNECTION
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-black uppercase text-[#2B1B2E] leading-snug">
+                        “ Empowered by Loving Peers & Seamless Specialist Support ”
+                      </h4>
+                      <p className="text-[11px] text-[#7A6B72] font-semibold leading-relaxed italic">
+                        "Experiencing Gestational Diabetes in a remote village felt deeply isolating. Vytal kept me safe by instantly allowing me to synchronize weekly blood glucose readings with Lobatse General Clinic. Sister Thandeka could review my trends, while the Peer Hub connected me with local diet boards. Winning nutritional quizzes in the Academy of maternal habits made my daily routine feel like a celebration instead of high-risk medical anxiety."
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-2.5 border-t border-dashed border-neutral-200/50 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-[#E84FA0]/10 flex items-center justify-center font-black text-xs text-[#E84FA0]">
+                      LM
+                    </div>
+                    <div className="leading-none text-left font-sans">
+                      <p className="text-[10px] font-extrabold text-[#2B1B2E]">Lerato Molefe, 34</p>
+                      <span className="text-[8.5px] text-[#7A6B72] font-extrabold block mt-0.5">Remote SADC Health Partner • Mother of Baby Tuelo</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Success Story C */}
+                <div className="p-5 bg-white/40 border border-white/50 rounded-3xl flex flex-col justify-between space-y-4 shadow-xs text-left relative overflow-hidden group hover:bg-white transition-all">
+                  <div className="space-y-4">
+                    {/* Mother pregnancy picture block */}
+                    <div className="h-60 rounded-2xl overflow-hidden bg-rose-50 border border-white/60 relative shadow-3xs">
+                      <img 
+                        src="/src/assets/images/sadc_mother_counseling_1781976955140.jpg" 
+                        alt="Nonhle Khumalo looking at newborn"
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-350"
+                      />
+                      <div className="absolute top-3 left-3 bg-[#2B1B2E]/90 text-white text-[8px] font-black tracking-wider uppercase px-2.5 py-1 rounded-full border border-white/20 flex items-center gap-1">
+                        <span>🇸🇿</span> MBABANE, ESWATINI • CLINICAL EXTREME CAUTION SAVED
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-black uppercase text-[#2B1B2E] leading-snug">
+                        “ Extreme Caution & Fast Doctor Referral for Rare Heart Condition ”
+                      </h4>
+                      <p className="text-[11px] text-[#7A6B72] font-semibold leading-relaxed italic">
+                        "During my final month, I had short, fast breathing that I assumed was just normal late pregnancy fatigue. As I logged my symptoms in Vytal, the system flagged a warning context for PPCM (Peripartum cardiomyopathy) and marked my status as 'Extreme Caution'. It prompted me to perform an immediate emergency consult. The clinic’s specialist received my card instantly. They initiated cardiovascular therapies right away, preventing heart failure. This platform literal saved my life!"
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-2.5 border-t border-dashed border-neutral-200/50 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center font-black text-xs text-rose-800">
+                      NK
+                    </div>
+                    <div className="leading-none text-left font-sans">
+                      <p className="text-[10px] font-extrabold text-[#2B1B2E]">Nonhle Khumalo, 31</p>
+                      <span className="text-[8.5px] text-[#7A6B72] font-extrabold block mt-0.5">High-Risk Ambulatory Referral • Mother of Baby Sifiso</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Success Story D */}
+                <div className="p-5 bg-white/40 border border-white/50 rounded-3xl flex flex-col justify-between space-y-4 shadow-xs text-left relative overflow-hidden group hover:bg-white transition-all">
+                  <div className="space-y-4">
+                    {/* Mother pregnancy picture block */}
+                    <div className="h-60 rounded-2xl overflow-hidden bg-rose-50 border border-white/60 relative shadow-3xs">
+                      <img 
+                        src="/src/assets/images/maternal_peer_circle_1781976969029.jpg" 
+                        alt="Tendai Moyo with supportive mothers support circle"
+                        referrerPolicy="no-referrer"
+                        className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-350"
+                      />
+                      <div className="absolute top-3 left-3 bg-[#2B1B2E]/90 text-white text-[8px] font-black tracking-wider uppercase px-2.5 py-1 rounded-full border border-white/20 flex items-center gap-1">
+                        <span>🇿🇼</span> BULAWAYO, ZIMBABWE • REGIONAL PEER HUB
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-black uppercase text-[#2B1B2E] leading-snug">
+                        “ Thriving within a Supportive Community & Secure Clinic Loops ”
+                      </h4>
+                      <p className="text-[11px] text-[#7A6B72] font-semibold leading-relaxed italic">
+                        "Living so far from any metropolitan hospital meant my family was deeply worried about rare pregnancy complications or sudden labor issues. The maternal peer support group inside Vytal became my absolute daily guide. We shared real caution advice and kept our diagnostic health cards synced. The platform seamlessly bridged us with doctors, so we always knew we had an emergency safety net. I felt incredibly secure and supported throughout!"
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-2.5 border-t border-dashed border-neutral-200/50 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center font-black text-xs text-teal-800">
+                      TM
+                    </div>
+                    <div className="leading-none text-left font-sans">
+                      <p className="text-[10px] font-extrabold text-[#2B1B2E]">Tendai Moyo, 26</p>
+                      <span className="text-[8.5px] text-[#7A6B72] font-extrabold block mt-0.5">Bulawayo Mothers Group Lead • Mother of Baby Farai</span>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* ====================================================
+            SURFACE B: PATIENT COMPANION APP (MOBILE MOCKUP SHELL)
+            ==================================================== */}
+        {activeSurface === "patient" && (
+          <div className="flex flex-col items-center justify-center space-y-6 pt-4">
+            
+            <div className="text-center space-y-1">
+              <span className="text-[9px] font-black uppercase text-[#E84FA0] bg-pink-100/60 border border-[#FF6FB1]/20 px-3.5 py-1 rounded-full">
+                DEVICE SIMULATOR VIEW (MOBILE-FIRST SCALE)
+              </span>
+              <h2 className="text-xl font-black text-[#2B1B2E] uppercase">Vytal Companion App</h2>
+              <p className="text-xs text-[#7A6B72] font-medium max-w-sm leading-normal mx-auto">
+                Scroll the gestation slider, submit mock reports in the **Reports** tab, and toggle languages instantaneously.
+              </p>
+            </div>
+
+            {/* Smartphone device container frame */}
+            <div className="w-[395px] h-[720px] rounded-[48px] border-[10px] border-[#2B1B2E] bg-white overflow-hidden shadow-2xl relative flex flex-col scale-[0.98]">
+              
+              {/* Dynamic camera notch mockup */}
+              <div className="absolute top-2 inset-x-0 w-28 h-5 bg-[#2B1B2E] rounded-full mx-auto z-50 flex items-center justify-center">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#1F1F1F] mr-3"></span>
+                <span className="w-1 h-1 rounded-full bg-[#101010]"></span>
+              </div>
+
+              {/* Status bar mock details */}
+              <div className="h-7 bg-[#FFF9F6] text-[#2B1B2E] text-[10px] uppercase font-bold tracking-widest px-8 pt-2 flex justify-between shrink-0 select-none z-30">
+                <span>09:41</span>
+                <div className="flex gap-1">
+                  <span>📶 SADC</span>
+                  <span>🔋 98%</span>
+                </div>
+              </div>
+
+              {/* Inner Portal App */}
+              <div className="flex-1 overflow-hidden relative pb-1">
+                <PatientPortal 
+                  sharedReports={sharedReports}
+                  onAddReport={handleAddReport}
+                  currentWeek={currentWeek}
+                  setCurrentWeek={handleSetCurrentWeek}
+                  vitalsLog={vitalsLog}
+                  onAddVitals={(v) => setVitalsLog([ ...vitalsLog, { ...v, id: `v-${Date.now()}`, createdAt: new Date().toISOString() }])}
+                  communityPosts={communityPosts}
+                  communityComments={communityComments}
+                  onAddPost={handleAddPost}
+                  onAddComment={handleAddComment}
+                  onReportPost={handleReportPost}
+                  onReportComment={handleReportComment}
+                  onBlockUser={handleBlockUser}
+                  onUnblockUser={handleUnblockUser}
+                  blockedUsers={blockedUsers}
+                  safetyAuditLogs={safetyAuditLogs}
+                  moderationAppeals={moderationAppeals}
+                  onSubmitAppeal={handleSubmitAppeal}
+                  topicNotifications={topicNotifications}
+                  onUpdateTopicNotifications={handleUpdateTopicNotifications}
+                  maternalMeetings={maternalMeetings}
+                  isOfflineMode={isOfflineMode}
+                  onToggleOfflineMode={() => setIsOfflineMode(!isOfflineMode)}
+                  postpartumCheckups={postpartumCheckups}
+                  onUpdatePostpartumCheckup={handleUpdatePostpartumCheckup}
+                  hospitalVisits={hospitalVisits}
+                />
+              </div>
+
+              {/* Virtual Home Button Indicator line bottom */}
+              <div className="h-5 bg-white/80 border-t border-neutral-100 flex items-center justify-center shrink-0 z-30 relative py-1.5">
+                <div className="w-24 h-1 bg-neutral-300 rounded-full cursor-pointer"></div>
+              </div>
+
+            </div>
+
+          </div>
+        )}
+
+        {/* ====================================================
+            SURFACE C: CLINICIAN DASHBOARD WORKSPACE
+            ==================================================== */}
+        {activeSurface === "clinician" && (
+          <div 
+            className="space-y-6 p-6 md:p-10 rounded-3xl border border-[#CFE6E3]/60 shadow-xl min-h-screen relative overflow-hidden"
+            style={{
+              backgroundImage: "linear-gradient(rgba(244, 248, 246, 0.91), rgba(244, 248, 246, 0.91)), url('/src/assets/images/gynecology_background_1781981188780.jpg')",
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+              backgroundRepeat: "no-repeat",
+              backgroundAttachment: "fixed"
+            }}
+          >
+            
+            {sessionClinician ? (
+              <ClinicianPortal 
+                currentClinician={sessionClinician}
+                onLogout={handleLogout}
+                sharedReports={sharedReports}
+                onReviewReport={handleReviewReport}
+                communityPosts={communityPosts}
+                communityComments={communityComments}
+                safetyAuditLogs={safetyAuditLogs}
+                moderationAppeals={moderationAppeals}
+                onResolveAppeal={handleResolveAppeal}
+                onToggleModeratePost={handleToggleModeratePost}
+                maternalMeetings={maternalMeetings}
+                onScheduleMeeting={handleScheduleMeeting}
+                isOfflineMode={isOfflineMode}
+                onToggleOfflineMode={() => setIsOfflineMode(!isOfflineMode)}
+                postpartumCheckups={postpartumCheckups}
+                onUpdatePostpartumCheckup={handleUpdatePostpartumCheckup}
+                hospitalVisits={hospitalVisits}
+                onAddHospitalVisit={handleAddHospitalVisit}
+              />
+            ) : (
+              // Secure login bypass dialogue
+              <div className={`max-w-md mx-auto bg-white/60 border border-white p-8 rounded-3xl backdrop-blur-xl shadow-lg mt-12 text-left space-y-6 ${shouldShake ? "animate-shake" : ""}`} id="doctor-auth-card">
+                
+                <div className="text-center space-y-2">
+                  <div className="w-12 h-12 bg-pink-100 text-[#E84FA0] border border-[#FF6FB1]/35 rounded-2xl flex items-center justify-center mx-auto">
+                    <Lock className="w-6 h-6 animate-pulse" />
+                  </div>
+                  <h2 className="text-sm font-black text-[#2B1B2E] uppercase tracking-wider">Clinician Workspace Locked</h2>
+                  <p className="text-xs text-[#7A6B72] font-semibold leading-relaxed">
+                    Authorized clinical logs and maternal health records are monitored under South African SADC registry oversight laws.
+                  </p>
+                </div>
+
+                <form onSubmit={handleManualLoginSubmit} className="space-y-4 text-xs font-semibold">
+                  <div>
+                    <label htmlFor="clinician-email" className="text-[8.5px] font-black uppercase text-[#7A6B72] block mb-1">Maternity Credential Email Node:</label>
+                    <input 
+                      id="clinician-email"
+                      type="email"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      placeholder="e.g. thandeka.kunene@vytalbridge.org"
+                      className="w-full bg-[#FFF9F6] border border-[#FF6FB1]/20 p-2.5 rounded-xl text-xs font-bold text-[#2B1B2E] focus:outline-none focus:ring-1 focus:ring-pink-400"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="clinician-pass" className="text-[8.5px] font-black uppercase text-[#7A6B72] block mb-1">Pin Code Identification:</label>
+                    <input 
+                      id="clinician-pass"
+                      type="password"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder="••••"
+                      className="w-full bg-[#FFF9F6] border border-[#FF6FB1]/20 p-2.5 rounded-xl text-xs font-bold text-[#2B1B2E] focus:outline-none focus:ring-1 focus:ring-pink-400"
+                    />
+                  </div>
+
+                  {loginError && (
+                    <p className="text-[9.5px] text-red-600 font-extrabold pb-1">
+                      {loginError}
+                    </p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={isLoggingIn}
+                    className="w-full py-3 bg-gradient-to-r from-[#FF6FB1] to-[#E84FA0] hover:shadow-lg transition-all text-white font-black uppercase text-xs rounded-xl cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isLoggingIn ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" id="login-spinner">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Verifying Session...</span>
+                      </>
+                    ) : (
+                      "Authorize Node Login"
+                    )}
+                  </button>
+                </form>
+
+                <div className="pt-1 group">
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickContactsModal(true)}
+                    className="w-full py-2.5 px-5 bg-pink-50 hover:bg-pink-100 hover:shadow-lg hover:shadow-pink-200 hover:scale-105 border border-pink-200/60 text-[#E84FA0] text-[11px] font-black uppercase tracking-wider rounded-xl cursor-pointer animate-pulse hover:animate-none group-hover:rotate-3 transition-transform duration-300 ease-out flex items-center justify-center gap-2 focus:outline-none shadow-3xs"
+                    id="btn-quick-admin-contacts"
+                    title="Emergency support for clinic access issues"
+                  >
+                    <Phone className="w-3.5 h-3.5" /> Show Support Contacts
+                  </button>
+                </div>
+
+                <div className="text-center pt-1 pb-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPinModal(true)}
+                    className="text-xs text-[#E84FA0] hover:underline font-extrabold cursor-pointer inline-flex items-center gap-1.5 focus:outline-none"
+                    id="link-forgot-pin"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5" /> Forgot your credentials or PIN?
+                  </button>
+                </div>
+
+                {/* Pre-configured Demo Account Bypass options */}
+                <div className="pt-4 border-t border-dashed border-neutral-200 text-center space-y-2.5">
+                  <span className="text-[8.5px] font-bold text-[#7A6B72] uppercase tracking-wider block">Bypass Lock Screen for Investors:</span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleBypassClinicianLogin("clinician")}
+                      type="button"
+                      className="flex-1 py-2.5 px-3 bg-emerald-500 hover:bg-emerald-600 transition-all text-white font-extrabold text-[10px] uppercase rounded-xl flex items-center justify-center gap-1 shadow-xs cursor-pointer"
+                    >
+                      <Stethoscope className="w-3.5 h-3.5" />
+                      <span>Sister Thandeka (Demo)</span>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
+          </div>
+        )}
+
+      </main>
+
+      {/* 4. Global SADC privacy footer */}
+      <footer className="w-full py-6 bg-[#2B1B2E] text-white text-xs border-t border-white/5 z-30 font-sans">
+        <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4 text-[#7A6B72]">
+          <div className="text-left">
+            <h4 className="font-extrabold text-[#E2F0E7] uppercase tracking-wider text-[11px]">Vytal Bridge Maternal Infrastructure</h4>
+            <span className="text-[10px] block mt-0.5 font-medium leading-relaxed">Continuous clinical triage reporting & AI prenatal companions.</span>
+          </div>
+          <div className="flex gap-4 mb-2 font-bold text-[10px] text-[#AFA2A7] leading-tight">
+            <span>SADC Health Standards Compliance</span>
+            <span>•</span>
+            <span>POPIA & GDPR Certified Enclave</span>
+          </div>
+        </div>
+      </footer>
+
+      {/* Quick Emergency Admin Contacts Modal */}
+      {showQuickContactsModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 z-[999]" id="quick-contacts-modal-overlay">
+          <div className="bg-white border-2 border-[#FF6FB1]/30 max-w-md w-full rounded-3xl overflow-hidden shadow-2xl relative p-6 space-y-4 text-left animate-fade-in" id="quick-contacts-modal-box">
+            <button
+              type="button"
+              onClick={() => setShowQuickContactsModal(false)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full hover:bg-neutral-100 flex items-center justify-center text-neutral-500 cursor-pointer transition-all focus:outline-none"
+              id="close-quick-contacts-modal"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 bg-pink-50 p-2.5 rounded-2xl border border-pink-100">
+              <div className="w-10 h-10 bg-[#FF6FB1]/10 rounded-xl flex items-center justify-center text-[#FF6FB1]">
+                <Phone className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <h4 className="text-xs font-black text-[#2B1B2E] uppercase">Direct Support Contacts</h4>
+                <p className="text-[10px] text-pink-700 font-extrabold font-sans">Mbabane HQ Recovery Hotline</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 py-2 text-xs text-[#2B1B2E] font-semibold">
+              <p className="text-[#5F716A] leading-relaxed">
+                For quick reference, here are the SADC-certified administrator support lines to fetch credentials or reset security pin entries:
+              </p>
+
+              <div className="p-4 bg-[#FFF9F6] border border-[#FF6FB1]/15 rounded-2xl space-y-3">
+                <div className="flex gap-3 items-center">
+                  <span className="text-lg leading-none">📞</span>
+                  <div>
+                    <p className="text-[10px] uppercase font-black tracking-wider text-[#7A6B72]">Hotline Terminal Call</p>
+                    <a href="tel:+26824042111" className="text-[#E84FA0] hover:underline text-xs font-black">+268 2404 2111</a>
+                  </div>
+                </div>
+
+                <div className="flex gap-3 items-center pt-2 border-t border-dashed border-pink-100">
+                  <span className="text-lg leading-none">✉️</span>
+                  <div>
+                    <p className="text-[10px] uppercase font-black tracking-wider text-[#7A6B72]">Support Dispatch E-Mail</p>
+                    <a href="mailto:recovery@vytalbridge.org" className="text-[#E84FA0] hover:underline text-xs font-black">recovery@vytalbridge.org</a>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-[10px] leading-relaxed text-[#7A6B72] italic bg-neutral-50 p-3 rounded-xl border border-neutral-200/50">
+                ⚠️ Maternal registry databases operate strictly under clinical safety audits. Always verify your credential identifiers with Sister Kunene when asking for security changes.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowQuickContactsModal(false)}
+              className="w-full py-2.5 bg-[#4F7066] hover:bg-[#1F2E2A] text-white text-[11px] font-black uppercase tracking-wider rounded-xl cursor-pointer transition-all shadow-xs"
+              id="confirm-quick-contacts-close"
+            >
+              Close Quick Reference
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Clinician and Mother PIN Recovery Modal */}
+      {showForgotPinModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 z-[999]" id="forgot-pin-modal-overlay">
+          <div className="bg-white border-2 border-[#FF6FB1]/30 max-w-md w-full rounded-3xl overflow-hidden shadow-2xl relative p-6 space-y-4 text-left animate-fade-in" id="forgot-pin-modal-box">
+            <button
+              type="button"
+              onClick={() => setShowForgotPinModal(false)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full hover:bg-neutral-100 flex items-center justify-center text-neutral-500 cursor-pointer transition-all focus:outline-none"
+              id="close-forgot-pin-modal"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 bg-pink-50 p-2.5 rounded-2xl border border-pink-100">
+              <div className="w-10 h-10 bg-[#FF6FB1]/10 rounded-xl flex items-center justify-center text-[#FF6FB1]">
+                <HelpCircle className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <h4 className="text-xs font-black text-[#2B1B2E] uppercase">PIN & Login Recovery Setup</h4>
+                <p className="text-[10px] text-pink-700 font-extrabold font-sans">Maternal Health Directory Security Access</p>
+              </div>
+            </div>
+
+            <div className="space-y-3.5 text-xs text-[#2B1B2E] font-medium leading-relaxed">
+              <p>
+                To maintain compliance with SADC privacy directives and <b>POPIA data safety standards</b>, clinicians and patient PINs cannot be reset directly online by end-users.
+              </p>
+              
+              <div className="p-3.5 bg-[#FFF9F6] border border-[#FF6FB1]/15 rounded-2xl space-y-2">
+                <span className="text-[9px] font-black uppercase text-[#E84FA0] block">Official Administrative Actions Required:</span>
+                
+                <div className="space-y-2 text-[11px] font-semibold text-[#5F716A]">
+                  <div className="flex gap-2">
+                    <span className="text-base leading-none">🏢</span>
+                    <div>
+                      <p className="text-[#2B1B2E] font-black leading-none">Central Administrative Office</p>
+                      <p className="text-[10px] mt-0.5">Vytal Bridge Registry Desk, Mbabane HQ</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-base leading-none">📞</span>
+                    <div>
+                      <p className="text-[#2B1B2E] font-black leading-none">Hotline Terminal Call</p>
+                      <a href="tel:+26824042111" className="text-[#E84FA0] hover:underline text-[10.5px] font-black">+268 2404 2111</a>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className="text-base leading-none">✉️</span>
+                    <div>
+                      <p className="text-[#2B1B2E] font-black leading-none">Support Dispatch E-Mail</p>
+                      <a href="mailto:recovery@vytalbridge.org" className="text-[#E84FA0] hover:underline text-[10.5px] font-black">recovery@vytalbridge.org</a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-[10px] text-[#7A6B72] italic bg-neutral-50 p-2.5 rounded-xl border border-neutral-200/50">
+                ⚠️ Mothers may also request a credential and PIN lookup directly in person from the head nurse or clinic supervisor (e.g., Sister Kunene) during their biometric wellness appointments.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowForgotPinModal(false)}
+              className="w-full py-2.5 bg-[#4F7066] hover:bg-[#1F2E2A] text-white text-[11px] font-black uppercase tracking-wider rounded-xl cursor-pointer transition-all shadow-xs"
+              id="confirm-forgot-pin-close"
+            >
+              Acknowledged & Return
+            </button>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

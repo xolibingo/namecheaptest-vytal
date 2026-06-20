@@ -1,0 +1,6 @@
+{
+  "name": "Vytal Bridge",
+  "description": "An AI-powered continuous maternal monitoring platform providing early-warning prenatal clinical triage and a companion educational patient experience.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
