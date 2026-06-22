@@ -213,6 +213,10 @@ export default function EducationalVideoHub() {
       });
 
       if (!startRes.ok) {
+        const errData = await startRes.json().catch(() => ({}));
+        if (errData.creditsDepleted) {
+          throw new Error("PREPAYMENT_CREDITS_DEPLETED");
+        }
         throw new Error("Failed to initialize Veo video generation job");
       }
 
@@ -309,7 +313,12 @@ export default function EducationalVideoHub() {
       setCustomPromptText("");
     } catch (err: any) {
       console.warn("Real Veo generation failed (falling back to helpful sandbox simulator):", err);
-      setGenStep("Launching fallback clinical viewport simulator...");
+      const isCreditsDepleted = err?.message === "PREPAYMENT_CREDITS_DEPLETED";
+      if (isCreditsDepleted) {
+        setGenStep("Notice: Project credits are depleted in AI Studio. Launching fallback offline workspace simulator...");
+      } else {
+        setGenStep("Launching fallback clinical viewport simulator...");
+      }
       
       let currentProgress = 10;
       const interval = setInterval(() => {

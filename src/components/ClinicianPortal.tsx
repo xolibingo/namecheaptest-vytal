@@ -32,7 +32,16 @@ import {
   EyeOff,
   ArrowRight,
   RefreshCw,
-  Video // To show Google Meet meetings beautifully!
+  Video, // To show Google Meet meetings beautifully!
+  Wifi,
+  WifiOff,
+  Database,
+  UploadCloud,
+  Check,
+  Plus,
+  AlertCircle,
+  GitMerge,
+  FileDown
 } from "lucide-react";
 import { signInWithGoogleMeet, createGoogleMeetSpace } from "../lib/firebase";
 
@@ -55,6 +64,8 @@ interface ClinicianPortalProps {
   onUpdatePostpartumCheckup?: (updated: PostpartumCheckup) => void;
   hospitalVisits?: HospitalVisit[];
   onAddHospitalVisit?: (newVisit: HospitalVisit) => void;
+  externalLanguage?: string;
+  onLanguageChange?: (lang: string) => void;
 }
 
 export default function ClinicianPortal({ 
@@ -75,10 +86,18 @@ export default function ClinicianPortal({
   postpartumCheckups = [],
   onUpdatePostpartumCheckup,
   hospitalVisits = [],
-  onAddHospitalVisit
+  onAddHospitalVisit,
+  externalLanguage,
+  onLanguageChange
 }: ClinicianPortalProps) {
   
-  const [clinicianLanguage, setClinicianLanguage] = useState<"English" | "siSwati" | "isiZulu" | "Setswana">("English");
+  const [clinicianLanguage, setClinicianLanguage] = useState<string>("English");
+
+  useEffect(() => {
+    if (externalLanguage) {
+      setClinicianLanguage(externalLanguage);
+    }
+  }, [externalLanguage]);
 
   const trans = {
     English: {
@@ -87,6 +106,7 @@ export default function ClinicianPortal({
       specialty: "Authorized Prenatal Specialist • Mbabane Centre Node",
       cohortTab: "Pregnancy Cohort Registry",
       telehealthTab: "Telehealth Sync",
+      chwTab: "CHW Field Hub (Offline-First)",
       exitWorkspace: "Exit Workspace",
       cohortListTitle: "Maternal Cohort List",
       cohortListSub: "Mbabane Regional Pregnancy Register",
@@ -102,6 +122,7 @@ export default function ClinicianPortal({
       specialty: "Sazi sasekuthwaleni lesingunyaziwe • Sikhungo saseMbabane",
       cohortTab: "Sajili Yasekhaya Tikhuleko",
       telehealthTab: "Tebiki Ngesikhungo",
+      chwTab: "CHW Field Hub (Yasekhaya)",
       exitWorkspace: "Phuma Emsebentini",
       cohortListTitle: "Uhlu Lwabakhulelwe",
       cohortListSub: "Sajili yeMbabane yalabakhulelwe",
@@ -117,6 +138,7 @@ export default function ClinicianPortal({
       specialty: "Uchwepheshe Ogunyaziwe Wezokubeletha • Mbabane Centre",
       cohortTab: "Uhlu Lwabakhulelwe",
       telehealthTab: "Isikhungo Se-Telehealth",
+      chwTab: "Isizinda se-CHW we-Offline",
       exitWorkspace: "Phuma Emsebenzini",
       cohortListTitle: "Uhlu Lwabakhulelwe",
       cohortListSub: "Ibhodi Yokubhalisa Kweziguli ZeMbabane",
@@ -132,6 +154,7 @@ export default function ClinicianPortal({
       specialty: "Moitseana yo o Letleletsweng wa Pelegi • Mbabane Centre",
       cohortTab: "Sajili ya Bakhulegi",
       telehealthTab: "Telehealth Consultation",
+      chwTab: "Lefelo la CHW (Yasekhaya)",
       exitWorkspace: "Tswa mo tirong",
       cohortListTitle: "Sajili ya bo-Mme",
       cohortListSub: "Lekgotla la Kwadiso ya bo-Mme ba ba Khulegilego",
@@ -140,10 +163,106 @@ export default function ClinicianPortal({
       riskHigh: "Godimo",
       riskMedium: "Gare",
       riskLow: "Tlase",
+    },
+    isiXhosa: {
+      appName: "Vytal Bridge",
+      workspaceTitle: "Wamkelekile",
+      specialty: "Ingcali egunyazisiweyo ye-Prenatal • Mbabane Centre",
+      cohortTab: "Ubhaliso lweMaternal Cohort",
+      telehealthTab: "Telehealth Consultation",
+      chwTab: "CHW Field Hub (Yasekhaya)",
+      exitWorkspace: "Phuma emsebenzini",
+      cohortListTitle: "Uluhlu lwaBakhulelweyo",
+      cohortListSub: "Sajili yeMbabane yalabakhulelwe",
+      searchPlaceholder: "Khangela kwigama lomguli...",
+      riskAll: "Zonke",
+      riskHigh: "Phezulu",
+      riskMedium: "Ephakathi",
+      riskLow: "Phantsi",
+    },
+    Yoruba: {
+      appName: "Alafe Vytal",
+      workspaceTitle: "Kaabo",
+      specialty: "Onisegun aboyun ti a fun ni aṣẹ • Mbabane Centre",
+      cohortTab: "Akojọpọ aboyun",
+      telehealthTab: "Ijumọsọrọ Telehealth",
+      chwTab: "CHW Hub (Laisi intanẹẹti)",
+      exitWorkspace: "Jade kuro ni iṣẹ",
+      cohortListTitle: "Atokọ ti awọn aboyun",
+      cohortListSub: "Mbabane Regional Oyún Forukọsilẹ",
+      searchPlaceholder: "Wa awọn alaisan nipasẹ orukọ...",
+      riskAll: "Gbogbo",
+      riskHigh: "Giga",
+      riskMedium: "Awọ",
+      riskLow: "Kekere",
+    },
+    Kiswahili: {
+      appName: "Vytal Bridge",
+      workspaceTitle: "Karibu",
+      specialty: "Mtaalamu Aliyeidhinishwa wa Uzazi • Kituo cha Mbabane",
+      cohortTab: "Sajili ya Mimba",
+      telehealthTab: "Ushauri wa Telehealth",
+      chwTab: "Kituo cha CHW (Nje ya Mtandao)",
+      exitWorkspace: "Ondoka Kazi",
+      cohortListTitle: "Orodha ya Wazazi",
+      cohortListSub: "Sajili ya Uzazi ya Mkoa wa Mbabane",
+      searchPlaceholder: "Tafuta wagonjwa kwa jina...",
+      riskAll: "Yote",
+      riskHigh: "Kiwango cha Juu",
+      riskMedium: "Kiwango cha Kati",
+      riskLow: "Kiwango cha Chini",
+    },
+    Amharic: {
+      appName: "ቪታል ድልድይ",
+      workspaceTitle: "እንኳን ደህና መጡ",
+      specialty: "የተፈቀደለት የወሊድ ስፔሻሊስት • ምባባን ማእከል",
+      cohortTab: "የእርግዝና መመዝገቢያ",
+      telehealthTab: "የቴሌ ጤና ማማከር",
+      chwTab: "CHW የመስክ ማእከል (ከመስመር ውጭ)",
+      exitWorkspace: "ከስራ ይውጡ",
+      cohortListTitle: "የነፍሰ ጡር እናቶች ዝርዝር",
+      cohortListSub: "የምባባን ክልላዊ የእርግዝና መዝገብ",
+      searchPlaceholder: "ታካሚዎችን በስም ይፈልጉ...",
+      riskAll: "ሁሉም",
+      riskHigh: "ከፍተኛ",
+      riskMedium: "መካከለኛ",
+      riskLow: "ዝቅተኛ",
+    },
+    Français: {
+      appName: "Vytal Pont",
+      workspaceTitle: "Bienvenue",
+      specialty: "Spécialiste prénatal agréé • Centre Mbabane",
+      cohortTab: "Registre de Cohorte",
+      telehealthTab: "Soin Telehealth",
+      chwTab: "Portail CHW (Hors-ligne)",
+      exitWorkspace: "Enlever Session",
+      cohortListTitle: "Liste des mères",
+      cohortListSub: "Registre de Grossesse de Mbabane",
+      searchPlaceholder: "Rechercher par nom...",
+      riskAll: "Tout",
+      riskHigh: "Élevé",
+      riskMedium: "Moyen",
+      riskLow: "Faible",
+    },
+    Português: {
+      appName: "Vytal Bridge",
+      workspaceTitle: "Bem-vindo",
+      specialty: "Especialista Pré-natal Autorizado • Centro de Mbabane",
+      cohortTab: "Registro de Gestações",
+      telehealthTab: "Consulta de Telemedicina",
+      chwTab: "Portal CHW (Offline-First)",
+      exitWorkspace: "Sair do Espaço",
+      cohortListTitle: "Lista de Cohorte Materna",
+      cohortListSub: "Registro Regional de Gravidez de Mbabane",
+      searchPlaceholder: "Buscar pacientes por nome...",
+      riskAll: "Todos",
+      riskHigh: "Alto",
+      riskMedium: "Médio",
+      riskLow: "Baixo",
     }
   };
 
-  const t = trans[clinicianLanguage];
+  const t = (trans as any)[clinicianLanguage] || trans.English;
 
   // SADC Patient Cohort Registry
   const [patients, setPatients] = useState<Patient[]>([
@@ -225,8 +344,241 @@ export default function ClinicianPortal({
   const [searchQuery, setSearchQuery] = useState("");
   const [filterRisk, setFilterRisk] = useState<string>("all");
   const [chartTab, setChartTab] = useState<"BP" | "HR" | "Temp" | "Weight">("BP");
-  const [activePortalTab, setActivePortalTab] = useState<"dashboard" | "telehealth">("dashboard");
+  const [activePortalTab, setActivePortalTab] = useState<"dashboard" | "telehealth" | "chw-offline">("dashboard");
   const [reportChartToggles, setReportChartToggles] = useState<{[key: string]: "BP" | "Weight"}>({});
+
+  // --- CHW Offline-First Sync Hub States ---
+  const [downloadedPatients, setDownloadedPatients] = useState<Patient[]>(() => {
+    const raw = localStorage.getItem("chw_offline_patient_db");
+    return raw ? JSON.parse(raw) : [];
+  });
+  const [downloadedAt, setDownloadedAt] = useState<string | null>(() => {
+    return localStorage.getItem("chw_downloaded_at");
+  });
+  const [offlineQueue, setOfflineQueue] = useState<any[]>(() => {
+    const raw = localStorage.getItem("chw_offline_sync_queue");
+    return raw ? JSON.parse(raw) : [];
+  });
+  const [activeOfflinePatientId, setActiveOfflinePatientId] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncLogs, setSyncLogs] = useState<string[]>([]);
+  const [conflictItem, setConflictItem] = useState<any | null>(null);
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [reconnectLog, setReconnectLog] = useState<string>("");
+
+  // Manual form entry offline fields
+  const [offlineSystolic, setOfflineSystolic] = useState<number>(120);
+  const [offlineDiastolic, setOfflineDiastolic] = useState<number>(80);
+  const [offlinePulse, setOfflinePulse] = useState<number>(78);
+  const [offlineTemp, setOfflineTemp] = useState<number>(36.6);
+  const [offlineWeight, setOfflineWeight] = useState<number>(70);
+  const [offlineSymptoms, setOfflineSymptoms] = useState<string[]>([]);
+  const [offlineNotes, setOfflineNotes] = useState<string>("");
+
+  // Action methods:
+  const handleDownloadDataset = () => {
+    localStorage.setItem("chw_offline_patient_db", JSON.stringify(patients));
+    const nowStr = new Date().toLocaleString();
+    localStorage.setItem("chw_downloaded_at", nowStr);
+    setDownloadedPatients(patients);
+    setDownloadedAt(nowStr);
+    
+    // Also save default history for downloaded patients
+    const historyMap: {[key: string]: VitalsLog[]} = {};
+    patients.forEach(pat => {
+      const bpMult = pat.riskLevel === "high" ? 1.2 : 1.0;
+      historyMap[pat.id] = [
+        { id: `h-${pat.id}-1`, patientId: pat.id, systolic: Math.round(110 * bpMult), diastolic: Math.round(70 * bpMult), pulse: 78, temperature: 36.4, weight: 68.0, recordedBy: "Self", createdAt: new Date(Date.now() - 3600000 * 24 * 7 * 3).toISOString() },
+        { id: `h-${pat.id}-2`, patientId: pat.id, systolic: Math.round(112 * bpMult), diastolic: Math.round(72 * bpMult), pulse: 82, temperature: 36.5, weight: 69.4, recordedBy: "CHW", createdAt: new Date(Date.now() - 3600000 * 24 * 7 * 2).toISOString() },
+        { id: `h-${pat.id}-3`, patientId: pat.id, systolic: Math.round(115 * bpMult), diastolic: Math.round(74 * bpMult), pulse: 85, temperature: 36.6, weight: 70.5, recordedBy: "Self", createdAt: new Date(Date.now() - 3600000 * 24 * 7 * 1).toISOString() },
+        { id: `h-${pat.id}-4`, patientId: pat.id, systolic: Math.round(118 * bpMult), diastolic: Math.round(75 * bpMult), pulse: 88, temperature: 36.7, weight: 71.5, recordedBy: "Self", createdAt: new Date().toISOString() }
+      ];
+    });
+    localStorage.setItem("chw_offline_vitals_history", JSON.stringify(historyMap));
+  };
+
+  const handleSaveOfflineVitals = (patientId: string, patientName: string) => {
+    const newLog = {
+      id: `queue-${Date.now()}`,
+      patientId,
+      patientName,
+      systolic: offlineSystolic,
+      diastolic: offlineDiastolic,
+      pulse: offlinePulse,
+      temperature: offlineTemp,
+      weight: offlineWeight,
+      symptoms: offlineSymptoms,
+      notes: offlineNotes,
+      createdAt: new Date().toISOString(),
+      status: "pending" as const
+    };
+
+    const updatedQueue = [...offlineQueue, newLog];
+    setOfflineQueue(updatedQueue);
+    localStorage.setItem("chw_offline_sync_queue", JSON.stringify(updatedQueue));
+
+    // Reset fields
+    setOfflineNotes("");
+    setOfflineSymptoms([]);
+    setActiveOfflinePatientId(null);
+  };
+
+  const triggerSyncProcess = async () => {
+    if (offlineQueue.length === 0) return;
+    setIsSyncing(true);
+    setSyncLogs(["Initializing Secure African Telemedical Handshake...", "Validating SADC regional health registry cryptographic node..."]);
+    
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    setSyncLogs(prev => [...prev, `Found ${offlineQueue.length} pending telemetry recordings taken in-the-field.`, "Checking central database for conflicts and collisions..."]);
+    
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    let updatedQueue = [...offlineQueue];
+    let processedLogs: VitalsLog[] = [];
+    let conflictFound = false;
+
+    for (let i = 0; i < updatedQueue.length; i++) {
+      const item = updatedQueue[i];
+      if (item.status === "synced") continue;
+
+      // Conflict rule: Same-day existing entries on the server
+      const sameDayServerLog = vitalsHistory.find(v => v.patientId === item.patientId && new Date(v.createdAt).toDateString() === new Date(item.createdAt).toDateString());
+
+      if (sameDayServerLog && item.status !== "conflicted" && !item.conflictResolved) {
+        conflictFound = true;
+        updatedQueue[i] = {
+          ...item,
+          status: "conflicted",
+          conflictWith: sameDayServerLog
+        };
+        setSyncLogs(prev => [...prev, `⚠️ Conflict discovered for patient: ${item.patientName}. Pre-existing server telemetry exists.`]);
+      } else {
+        const synchedVitals: VitalsLog = {
+          id: `v-sync-${item.id}`,
+          patientId: item.patientId,
+          systolic: item.systolic,
+          diastolic: item.diastolic,
+          pulse: item.pulse,
+          temperature: item.temperature,
+          weight: item.weight,
+          symptoms: item.symptoms,
+          recordedBy: "CHW",
+          riskAlerts: item.systolic >= 140 || item.diastolic >= 90 ? ["Hypertension detected"] : [],
+          createdAt: item.createdAt,
+          notes: item.notes
+        };
+        processedLogs.push(synchedVitals);
+        updatedQueue[i] = { ...item, status: "synced" };
+      }
+    }
+
+    if (processedLogs.length > 0) {
+      setVitalsHistory(prev => [...prev, ...processedLogs]);
+    }
+
+    setOfflineQueue(updatedQueue);
+    localStorage.setItem("chw_offline_sync_queue", JSON.stringify(updatedQueue));
+
+    if (conflictFound) {
+      setSyncLogs(prev => [...prev, "Sync partially halted: ⚠️ Please resolve collisions manually below."]);
+    } else {
+      setSyncLogs(prev => [...prev, "✅ Telemetry Synchronization absolute! SADC prenatal indicators saved.", "Updating regional e-alert status monitors..."]);
+      await new Promise(resolve => setTimeout(resolve, 850));
+      setOfflineQueue([]);
+      localStorage.setItem("chw_offline_sync_queue", JSON.stringify([]));
+    }
+    setIsSyncing(false);
+  };
+
+  const handleTriggerReconnectSync = async () => {
+    setIsReconnecting(true);
+    setReconnectLog("Attempting Firestore socket ping & cryptographic handshake...");
+    await new Promise(r => setTimeout(r, 800));
+    
+    // Switch to online if we are offline
+    if (isOfflineMode) {
+      setReconnectLog("Broadcasting cellular telemetry bands to state ONLINE...");
+      if (onToggleOfflineMode) {
+        onToggleOfflineMode();
+      }
+      await new Promise(r => setTimeout(r, 800));
+    }
+    
+    setReconnectLog("Establishing Secure SADC Workspace handshake with Firestore DB...");
+    await new Promise(r => setTimeout(r, 800));
+    
+    setReconnectLog("Syncing local buffer queues directly to SADC health record repository...");
+    await new Promise(r => setTimeout(r, 600));
+
+    setIsReconnecting(false);
+    setReconnectLog("");
+    
+    if (offlineQueue.length > 0) {
+      triggerSyncProcess();
+    }
+  };
+
+  const handleResolveConflictOverwrite = (item: any) => {
+    setVitalsHistory(prev => prev.map(v => {
+      if (v.patientId === item.patientId && new Date(v.createdAt).toDateString() === new Date(item.createdAt).toDateString()) {
+        return {
+          ...v,
+          systolic: item.systolic,
+          diastolic: item.diastolic,
+          pulse: item.pulse,
+          temperature: item.temperature,
+          weight: item.weight,
+          symptoms: item.symptoms,
+          notes: `[CHW Overwrite - Resolved]: ${item.notes || ""}`
+        };
+      }
+      return v;
+    }));
+
+    const nextQueue = offlineQueue.filter(q => q.id !== item.id);
+    setOfflineQueue(nextQueue);
+    localStorage.setItem("chw_offline_sync_queue", JSON.stringify(nextQueue));
+    setConflictItem(null);
+  };
+
+  const handleResolveConflictMerge = (item: any) => {
+    const newV: VitalsLog = {
+      id: `v-sync-${item.id}`,
+      patientId: item.patientId,
+      systolic: item.systolic,
+      diastolic: item.diastolic,
+      pulse: item.pulse,
+      temperature: item.temperature,
+      weight: item.weight,
+      symptoms: item.symptoms,
+      recordedBy: "CHW",
+      riskAlerts: item.systolic >= 140 || item.diastolic >= 90 ? ["Hypertension detected"] : [],
+      createdAt: item.createdAt,
+      notes: `[SADC Collaborative Entry] — CHW Field Notes: ${item.notes || ""}`
+    };
+
+    setVitalsHistory(prev => [...prev, newV]);
+
+    const nextQueue = offlineQueue.filter(q => q.id !== item.id);
+    setOfflineQueue(nextQueue);
+    localStorage.setItem("chw_offline_sync_queue", JSON.stringify(nextQueue));
+    setConflictItem(null);
+  };
+
+  const handleResolveConflictDiscard = (item: any) => {
+    const nextQueue = offlineQueue.filter(q => q.id !== item.id);
+    setOfflineQueue(nextQueue);
+    localStorage.setItem("chw_offline_sync_queue", JSON.stringify(nextQueue));
+    setConflictItem(null);
+  };
+
+  // Trigger Auto-Sync when going back online
+  useEffect(() => {
+    if (!isOfflineMode && offlineQueue.length > 0) {
+      triggerSyncProcess();
+    }
+  }, [isOfflineMode]);
 
   // Clinical Response states
   const [selectedAlertId, setSelectedAlertId] = useState<string>("");
@@ -601,14 +953,26 @@ export default function ClinicianPortal({
             <span className="text-[9px] font-black text-[#5F716A] uppercase">🌐 translation:</span>
             <select
               value={clinicianLanguage}
-              onChange={(e) => setClinicianLanguage(e.target.value as any)}
+              onChange={(e) => {
+                const newLang = e.target.value;
+                setClinicianLanguage(newLang);
+                if (onLanguageChange) {
+                  onLanguageChange(newLang);
+                }
+              }}
               className="text-[10px] font-black bg-transparent text-[#2B1B2E] outline-none cursor-pointer"
               id="clinician-language-selector"
             >
               <option value="English">🇬🇧 English</option>
               <option value="siSwati">🇸🇿 siSwati</option>
-              <option value="isiZulu">🇿🇦 isiZulu</option>
               <option value="Setswana">🇧🇼 Setswana</option>
+              <option value="isiZulu">🇿🇦 isiZulu</option>
+              <option value="isiXhosa">🇿🇦 isiXhosa</option>
+              <option value="Yoruba">🇳🇬 Yoruba</option>
+              <option value="Kiswahili">🇰🇪 Kiswahili</option>
+              <option value="Amharic">🇪🇹 Amharic</option>
+              <option value="Français">🇫🇷 Français</option>
+              <option value="Português">🇵🇹 Português</option>
             </select>
           </div>
 
@@ -651,6 +1015,23 @@ export default function ClinicianPortal({
           {maternalMeetings.length > 0 && (
             <span className="absolute -top-1 -right-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-[#E84FA0] text-[8px] font-black text-white shrink-0">
               {maternalMeetings.length}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setActivePortalTab("chw-offline")}
+          className={`px-5 py-2.5 rounded-xl font-black text-xs uppercase cursor-pointer transition-all flex items-center gap-2 select-none relative ${
+            activePortalTab === "chw-offline"
+              ? "bg-amber-500 text-white shadow-sm font-extrabold shadow-3xs"
+              : "text-[#2B1B2E]/80 hover:bg-white"
+          }`}
+        >
+          <Wifi className="w-4 h-4" />
+          <span>{t.chwTab}</span>
+          {offlineQueue.filter(q => q.status === "pending" || q.status === "conflicted").length > 0 && (
+            <span className="absolute -top-1 -right-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-red-500 text-[8px] font-black text-white shrink-0">
+              {offlineQueue.filter(q => q.status === "pending" || q.status === "conflicted").length}
             </span>
           )}
         </button>
@@ -1842,6 +2223,635 @@ export default function ClinicianPortal({
             </div>
 
           </div>
+        </div>
+      )}
+
+      {activePortalTab === "chw-offline" && (
+        <div className="space-y-6 animate-fade-in text-left font-sans" id="chw-offline-hub-container">
+          
+          {/* 1. Sync & Online Status Banner */}
+          <div className="p-6 bg-[#2B1B2E] text-white rounded-3xl border border-white/10 shadow-lg relative overflow-hidden" id="chw-telecom-network-banner">
+            <div className="absolute right-0 top-0 translate-x-12 -translate-y-12 w-64 h-64 bg-gradient-to-br from-pink-500/20 to-transparent rounded-full pointer-events-none"></div>
+            
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative z-10">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <span className={`h-2.5 w-2.5 rounded-full animate-pulse ${isOfflineMode ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-[#FF6FB1]">Regional CHW Field Station • Eswatini</span>
+                </div>
+                <h2 className="text-lg font-black uppercase">Offline-First Telco & Vitals Hub</h2>
+                <p className="text-xs text-neutral-300 max-w-xl font-medium leading-relaxed">
+                  Community Health Workers (CHWs) use this workspace to download vital records before clinical deployment into deep rural off-grid zones, log diagnostics offline, and safely synchronize telemedicine registries.
+                </p>
+              </div>
+
+              {/* Status Display panel */}
+              <div className="flex flex-col w-full md:w-auto gap-3 shrink-0">
+                <div className={`p-4 rounded-2xl flex items-center gap-3 border ${
+                  isOfflineMode 
+                    ? 'bg-amber-500/15 border-amber-500/35' 
+                    : 'bg-emerald-500/15 border-emerald-500/35'
+                }`}>
+                  <div className={`p-2.5 rounded-xl ${isOfflineMode ? 'bg-amber-500/35' : 'bg-emerald-500/35'}`}>
+                    {isOfflineMode ? <WifiOff className="w-5 h-5 text-amber-300" /> : <Wifi className="w-5 h-5 text-emerald-300" />}
+                  </div>
+                  <div>
+                    <span className="text-[9px] font-black uppercase text-neutral-400 block tracking-wide">Network Node Connectivity</span>
+                    <span className="text-xs font-black uppercase tracking-wider block">
+                      {isOfflineMode ? "DISCONNECTED (Offline Mode)" : "CONNECTED (Live SADC Node)"}
+                    </span>
+                    <span className="text-[8.5px] font-bold text-neutral-300 block">
+                      {isOfflineMode ? "Telemetry cached to local queue" : "Automatic cloud propagation active"}
+                    </span>
+                  </div>
+                </div>
+
+                <button 
+                  type="button"
+                  onClick={onToggleOfflineMode}
+                  className={`w-full py-2.5 px-4 rounded-xl text-xs font-black uppercase border cursor-pointer hover:shadow-md transition-all text-center select-none active:scale-98 ${
+                    isOfflineMode 
+                      ? 'bg-emerald-50 text-white border-emerald-400 hover:bg-emerald-600' 
+                      : 'bg-amber-500 text-white border-amber-400 hover:bg-amber-600'
+                  }`}
+                  style={{ minHeight: "44px" }}
+                >
+                  {isOfflineMode ? "🔌 Switch to Online SADC Sync Node" : "📴 Simulate Rural Offline Descent"}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Download Baseline Dataset Section */}
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+            <div className="md:col-span-12 bg-white/50 backdrop-blur-md rounded-3xl p-6 border border-[#CFE6E3] flex flex-col md:flex-row justify-between items-start md:items-center gap-6 shadow-sm">
+              <div className="space-y-1.5 text-left">
+                <div className="flex items-center gap-1.5">
+                  <Database className="w-4 h-4 text-emerald-600" />
+                  <span className="text-xs font-black uppercase text-[#2B1B2E]">CHW Field Snapshots Buffer</span>
+                </div>
+                <p className="text-xs text-[#7A6B72] font-semibold max-w-2xl leading-relaxed">
+                  Always download the latest clinical registry before beginning field rotations. Doing so prepares a high-integrity sandbox containing all demographic info and clinical medical history.
+                </p>
+                {downloadedAt ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      STABLE SNAPSHOT MATCHED
+                    </span>
+                    <span className="text-[10px] text-[#7A6B72] font-mono font-bold">
+                      Last Downloaded: {downloadedAt} ({downloadedPatients.length} Active Mothers Cached)
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 mt-1 text-red-600 font-bold text-[10.5px]">
+                    ⚠️ CLINIC SNAPSHOT EMPTY: Please download local telemetry baseline before proceeding.
+                  </div>
+                )}
+              </div>
+
+              <button
+                type="button"
+                disabled={isOfflineMode}
+                onClick={handleDownloadDataset}
+                className="w-full md:w-auto shrink-0 py-3.5 px-6 bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-2xl text-xs font-black uppercase cursor-pointer flex items-center justify-center gap-2 shadow-sm hover:opacity-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed select-none active:scale-95"
+                style={{ minHeight: "44px" }}
+              >
+                <FileDown className="w-4 h-4" />
+                <span>Download Offline Task Dataset</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 3. Operational Queue & Firestore Reconnection Status Dashboard Widget */}
+          <div className="bg-white/80 border border-[#CFE6E3] rounded-3xl p-6 shadow-sm space-y-4 text-left" id="chw-offline-status-dashboard">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-neutral-100" id="chw-dashboard-header-container">
+              <div className="space-y-1" id="chw-dashboard-title-group">
+                <span className="text-[9px] font-black text-[#FF6FB1] uppercase tracking-widest block" id="chw-dashboard-pre-title">Operational Telemetry Widget</span>
+                <h3 className="text-sm font-black text-[#2B1B2E] uppercase flex items-center gap-2" id="chw-dashboard-main-title">
+                  <Activity className="w-4.5 h-4.5 text-pink-500 animate-pulse" id="chw-dashboard-pulse-icon" />
+                  <span>SADC Offline Registry Queue Monitor</span>
+                </h3>
+                <p className="text-[11px] text-[#7A6B72] font-semibold leading-relaxed" id="chw-dashboard-desc">
+                  Real-time status tracking telemetry and manual synchronization flow for offline Community Health Worker (CHW) field records.
+                </p>
+              </div>
+
+              {/* Manual Trigger Sync Button */}
+              <button
+                type="button"
+                id="chw-sync-trigger-btn"
+                disabled={isReconnecting || isSyncing}
+                onClick={handleTriggerReconnectSync}
+                className="w-full sm:w-auto shrink-0 py-3 px-5 bg-gradient-to-r from-pink-500 to-[#E84FA0] text-white hover:opacity-95 rounded-2xl text-xs font-black uppercase flex items-center justify-center gap-2 shadow-sm transition-all select-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer active:scale-95"
+                style={{ minHeight: "44px" }}
+              >
+                <RefreshCw className={`w-4 h-4 ${isReconnecting || isSyncing ? 'animate-spin' : ''}`} id="chw-sync-refresh-icon" />
+                <span>Trigger Handshake & Sync</span>
+              </button>
+            </div>
+
+            {/* Metrics cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4" id="chw-dashboard-metrics-grid">
+              
+              {/* Metric 1: Current Queue size */}
+              <div className="p-4 bg-neutral-50 rounded-2xl border border-neutral-150/80 space-y-1" id="chw-metric-queue-size-card">
+                <span className="text-[8.5px] font-black uppercase text-[#7A6B72] tracking-wider block" id="chw-label-queue-size">Queue Buffer Size</span>
+                <div className="flex items-baseline gap-1.5" id="chw-val-queue-size-container">
+                  <span className="text-2xl font-black text-[#2B1B2E] font-mono" id="chw-val-queue-size">{offlineQueue.length}</span>
+                  <span className="text-[10px] font-bold text-neutral-500" id="chw-unit-queue-size">records</span>
+                </div>
+                <div className="text-[9.5px] font-semibold text-neutral-400" id="chw-footer-queue-size">Total files currently cached in memory</div>
+              </div>
+
+              {/* Metric 2: Pending sync items count */}
+              <div className="p-4 bg-yellow-50/50 rounded-2xl border border-yellow-200/50 space-y-1" id="chw-metric-pending-sync-card">
+                <span className="text-[8.5px] font-black uppercase text-amber-700 tracking-wider block" id="chw-label-pending-sync">Pending Sync Count</span>
+                <div className="flex items-baseline gap-1.5" id="chw-val-pending-sync-container">
+                  <span className="text-2xl font-black text-amber-600 font-mono" id="chw-val-pending-sync">
+                    {offlineQueue.filter(q => q.status === "pending").length}
+                  </span>
+                  <span className="text-[10px] font-bold text-amber-700" id="chw-unit-pending-sync">unsynced</span>
+                </div>
+                <div className="text-[9.5px] font-semibold text-amber-500" id="chw-footer-pending-sync">Unsynced logs awaiting network uplink</div>
+              </div>
+
+              {/* Metric 3: Active connection state */}
+              <div className={`p-4 rounded-2xl border space-y-1 ${
+                isOfflineMode 
+                  ? 'bg-orange-50/50 border-orange-200/50' 
+                  : 'bg-emerald-50/50 border-emerald-200/50'
+              }`} id="chw-metric-conn-status-card">
+                <span className="text-[8.5px] font-black uppercase tracking-wider block text-neutral-600" id="chw-label-conn-status">
+                  Firestore Registry Link
+                </span>
+                <div className="flex items-center gap-2" id="chw-val-conn-status-container">
+                  <span className={`inline-block w-2.5 h-2.5 rounded-full animate-pulse ${isOfflineMode ? 'bg-orange-500' : 'bg-emerald-500'}`} id="chw-conn-pulse-dot" />
+                  <span className="text-xs font-black text-neutral-800 uppercase font-sans" id="chw-val-conn-status">
+                    {isOfflineMode ? "OFFLINE (Local)" : "ONLINE (SADC Node)"}
+                  </span>
+                </div>
+                <div className="text-[9.5px] font-semibold text-neutral-500" id="chw-footer-conn-status">
+                  {isOfflineMode ? "Requires manual trigger override" : "Automatic dual propagation active"}
+                </div>
+              </div>
+
+              {/* Metric 4: Queue Status Indicator */}
+              <div className="p-4 bg-indigo-50/40 rounded-2xl border border-indigo-200/50 space-y-1" id="chw-metric-queue-status-card">
+                <span className="text-[8.5px] font-black uppercase text-indigo-700 tracking-wider block" id="chw-label-queue-status">Queue Sync State</span>
+                <div className="text-xs font-black text-indigo-950 uppercase block truncate font-sans" id="chw-val-queue-status">
+                  {isReconnecting ? (
+                    <span className="text-pink-600 font-bold animate-pulse" id="chw-status-txt-reconnecting">Initiating Handshake...</span>
+                  ) : isSyncing ? (
+                    <span className="text-blue-600 font-bold animate-pulse" id="chw-status-txt-syncing">Pruning Queue...</span>
+                  ) : offlineQueue.filter(q => q.status === "conflicted").length > 0 ? (
+                    <span className="text-rose-600 font-bold animate-pulse" id="chw-status-txt-conflict">Collision Blocked!</span>
+                  ) : offlineQueue.length > 0 ? (
+                    <span className="text-amber-600" id="chw-status-txt-backlog">Awaiting Uplink</span>
+                  ) : (
+                    <span className="text-emerald-600" id="chw-status-txt-synced">Fully Synced</span>
+                  )}
+                </div>
+                <div className="text-[9.5px] font-semibold text-neutral-500 truncate" id="chw-footer-queue-status">
+                  {isReconnecting ? "Negotiating security keys..." : offlineQueue.length > 0 ? "Local records out of sync" : "Everything clean & updated"}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Operational connection step logs */}
+            {isReconnecting && (
+              <div className="p-4 bg-neutral-900 border border-neutral-800 text-emerald-400 font-mono text-[10.5px] rounded-2xl animate-fade-in text-left flex gap-2 items-center" id="chw-reconnecting-status-logs">
+                <RefreshCw className="w-3.5 h-3.5 text-[#FF6FB1] animate-spin shrink-0" id="chw-logs-refresh-icon" />
+                <p className="leading-snug" id="chw-logs-text">{reconnectLog}</p>
+              </div>
+            )}
+          </div>
+
+          {/* 4. Main Workspace Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            
+            {/* L-Grid: Who to Visit Today (Offline-Data Target List) */}
+            <div className="lg:col-span-7 space-y-4">
+              <div className="bg-white/40 border border-[#CFE6E3] p-5 rounded-3xl backdrop-blur-md space-y-3 shadow-2xs">
+                <div>
+                  <span className="text-[9px] font-black text-rose-600 uppercase tracking-widest block">Daily Routing Directives</span>
+                  <h3 className="text-xs font-black text-[#2B1B2E] uppercase">Who To Visit Today (Field Task List)</h3>
+                  <p className="text-[10.5px] text-[#7A6B72] font-semibold leading-relaxed mt-0.5">
+                    Visits are auto-prioritized by SADC pregnancy risk quotients and proximity to the maternal delivery estimate.
+                  </p>
+                </div>
+
+                {/* Patient Visit Rows */}
+                <div className="space-y-3">
+                  {(isOfflineMode ? downloadedPatients : patients).map((patient, index) => {
+                    const offlineChecked = offlineQueue.some(q => q.patientId === patient.id && q.status === "pending");
+                    const isHighUrgency = patient.riskLevel === "high" || patient.gestationalWeeks >= 35;
+                    
+                    return (
+                      <div 
+                        key={patient.id}
+                        className={`p-4 rounded-2xl border transition-all ${
+                          offlineChecked 
+                            ? "bg-emerald-50/70 border-emerald-300/40" 
+                            : isHighUrgency 
+                              ? "bg-rose-50/60 border-rose-300/40 hover:bg-rose-100/30" 
+                              : "bg-white/70 border-neutral-200/50 hover:bg-white"
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h4 className="text-xs font-black text-[#2B1B2E]">{patient.name}</h4>
+                              <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider ${
+                                patient.riskLevel === "high" 
+                                  ? "bg-rose-100 text-rose-700" 
+                                  : patient.riskLevel === "medium"
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-emerald-100 text-emerald-700"
+                              }`}>
+                                {patient.riskLevel} risk
+                              </span>
+                              {isHighUrgency && (
+                                <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-700 font-extrabold text-[8px] uppercase tracking-wide">
+                                  ⚠️ Gestational Urgency
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-3 text-[10px] text-[#7A6B72] font-semibold">
+                              <span>Age: {patient.age}</span>
+                              <span>•</span>
+                              <span>Weeks: {patient.gestationalWeeks} (EDD: {patient.edd})</span>
+                            </div>
+                            <p className="text-[9.5px] text-[#63555c] italic font-semibold leading-normal">
+                              🎯 Driving signal: {patient.riskDrivingSignal}
+                            </p>
+                          </div>
+
+                          <div className="shrink-0">
+                            {offlineChecked ? (
+                              <span className="px-3.5 py-2 rounded-xl text-[9.5px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200 inline-flex items-center gap-1.5" style={{ minHeight: "44px" }}>
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Reading Saved (Queued)</span>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveOfflinePatientId(patient.id);
+                                  setOfflineSystolic(patient.riskLevel === "high" ? 142 : 118);
+                                  setOfflineDiastolic(patient.riskLevel === "high" ? 92 : 75);
+                                  setOfflinePulse(80);
+                                  setOfflineTemp(36.6);
+                                  setOfflineWeight(70);
+                                  setOfflineSymptoms([]);
+                                  setOfflineNotes("");
+                                }}
+                                className={`w-full sm:w-auto py-2.5 px-3.5 text-xs font-black text-center uppercase rounded-xl border tracking-wider transition-all cursor-pointer active:scale-95 flex items-center justify-center gap-1.5 select-none ${
+                                  isHighUrgency 
+                                    ? "bg-rose-500 hover:bg-rose-600 text-white border-rose-400" 
+                                    : "bg-white hover:bg-neutral-50 text-[#2B1B2E] border-neutral-300"
+                                }`}
+                                style={{ minHeight: "44px" }}
+                              >
+                                <Plus className="w-4 h-4" />
+                                <span>Record Field Vitals</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Interactive Manual Entry Form Toggle inside the patient row */}
+                        {activeOfflinePatientId === patient.id && (
+                          <div className="mt-4 pt-4 border-t border-dashed border-neutral-300/60 animate-fade-in space-y-4 text-left bg-[#FFF9F6]/80 p-4 rounded-xl border border-[#FF6FB1]/10">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[9px] font-black uppercase text-[#FF6FB1]">Clinical Field Triage Form • {patient.name}</span>
+                              <button 
+                                type="button" 
+                                onClick={() => setActiveOfflinePatientId(null)}
+                                className="text-[9.5px] font-bold text-neutral-500 hover:text-rose-600 cursor-pointer uppercase py-1 px-2 border border-neutral-200 rounded-lg hover:bg-neutral-100"
+                                style={{ minHeight: "36px", minWidth: "80px" }}
+                              >
+                                Cancel Form
+                              </button>
+                            </div>
+
+                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                              {/* Systolic */}
+                              <div className="space-y-1">
+                                <label className="text-[8.5px] font-black uppercase text-[#7A6B72]">Systolic BP (mmHg)</label>
+                                <div className="flex items-center">
+                                  <input 
+                                    type="number"
+                                    min="70"
+                                    max="220"
+                                    value={offlineSystolic}
+                                    onChange={(e) => setOfflineSystolic(Number(e.target.value))}
+                                    className="w-full bg-white border border-neutral-200 p-2 text-xs font-bold text-center rounded-xl focus:outline-none focus:ring-1 focus:ring-rose-400"
+                                    style={{ minHeight: "44px" }}
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Diastolic */}
+                              <div className="space-y-1">
+                                <label className="text-[8.5px] font-black uppercase text-[#7A6B72]">Diastolic BP (mmHg)</label>
+                                <input 
+                                  type="number"
+                                  min="40"
+                                  max="140"
+                                  value={offlineDiastolic}
+                                  onChange={(e) => setOfflineDiastolic(Number(e.target.value))}
+                                  className="w-full bg-white border border-neutral-200 p-2 text-xs font-bold text-center rounded-xl focus:outline-none focus:ring-1 focus:ring-rose-400"
+                                  style={{ minHeight: "44px" }}
+                                />
+                              </div>
+
+                              {/* Heart Rate / Pulse */}
+                              <div className="space-y-1">
+                                <label className="text-[8.5px] font-black uppercase text-[#7A6B72]">Pulse (bpm)</label>
+                                <input 
+                                  type="number"
+                                  min="40"
+                                  max="200"
+                                  value={offlinePulse}
+                                  onChange={(e) => setOfflinePulse(Number(e.target.value))}
+                                  className="w-full bg-white border border-neutral-200 p-2 text-xs font-bold text-center rounded-xl focus:outline-none focus:ring-1 focus:ring-rose-400"
+                                  style={{ minHeight: "44px" }}
+                                />
+                              </div>
+
+                              {/* Temperature */}
+                              <div className="space-y-1">
+                                <label className="text-[8.5px] font-black uppercase text-[#7A6B72]">Temp (°C)</label>
+                                <input 
+                                  type="number"
+                                  step="0.1"
+                                  min="34"
+                                  max="43"
+                                  value={offlineTemp}
+                                  onChange={(e) => setOfflineTemp(Number(e.target.value))}
+                                  className="w-full bg-white border border-neutral-200 p-2 text-xs font-bold text-center rounded-xl focus:outline-none focus:ring-1 focus:ring-rose-400"
+                                  style={{ minHeight: "44px" }}
+                                />
+                              </div>
+
+                              {/* Weight */}
+                              <div className="space-y-1 col-span-2 sm:col-span-1">
+                                <label className="text-[8.5px] font-black uppercase text-[#7A6B72]">Weight (kg)</label>
+                                <input 
+                                  type="number"
+                                  min="30"
+                                  max="180"
+                                  value={offlineWeight}
+                                  onChange={(e) => setOfflineWeight(Number(e.target.value))}
+                                  className="w-full bg-white border border-neutral-200 p-2 text-xs font-bold text-center rounded-xl focus:outline-none focus:ring-1 focus:ring-rose-400"
+                                  style={{ minHeight: "44px" }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Symptoms checklist grid */}
+                            <div className="space-y-1.5">
+                              <label className="text-[8.5px] font-black uppercase text-[#7A6B72] block">Symptoms Checklist observed in research visit:</label>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-semibold text-[#2B1B2E]">
+                                {[
+                                  { label: "Severe Headache or Migraines", value: "Severe Headache" },
+                                  { label: "Swelling / Edema in Face & Hands", value: "Swelling / Edema" },
+                                  { label: "Blurred Vision / Flashing Lights", value: "Blurred Vision" },
+                                  { label: "Epigastric or Upper Abdominal Pain", value: "Abdominal Pain" },
+                                  { label: "Excessive or Persistent Vomiting", value: "Persistent Vomiting" }
+                                ].map((symp) => {
+                                  const checked = offlineSymptoms.includes(symp.value);
+                                  return (
+                                    <label key={symp.value} className="flex items-center gap-3 p-2.5 bg-white/70 border border-neutral-200/50 rounded-lg cursor-pointer select-none" style={{ minHeight: "44px" }}>
+                                      <input 
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => {
+                                          if (checked) {
+                                            setOfflineSymptoms(offlineSymptoms.filter(s => s !== symp.value));
+                                          } else {
+                                            setOfflineSymptoms([...offlineSymptoms, symp.value]);
+                                          }
+                                        }}
+                                        className="rounded border-neutral-300 text-pink-600 focus:ring-pink-400 w-4 h-4"
+                                      />
+                                      <span>{symp.label}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Notes details */}
+                            <div className="space-y-1">
+                              <label className="text-[8.5px] font-black uppercase text-[#7A6B72] block">CHW Field Observations & Clinical Notes:</label>
+                              <textarea 
+                                value={offlineNotes}
+                                onChange={(e) => setOfflineNotes(e.target.value)}
+                                placeholder="Describe current patient condition, baby movements, adherence to medication..."
+                                rows={2}
+                                className="w-full bg-white border border-neutral-200 p-2.5 rounded-xl text-xs font-bold text-[#2B1B2E] placeholder-neutral-400 focus:outline-none focus:ring-1 focus:ring-rose-400"
+                              />
+                            </div>
+
+                            {/* Submit offline log button */}
+                            <button
+                              type="button"
+                              onClick={() => handleSaveOfflineVitals(patient.id, patient.name)}
+                              className="w-full py-3 bg-gradient-to-r from-emerald-600 to-[#4F7066] text-white hover:opacity-95 rounded-xl font-black uppercase tracking-wider text-xs shadow-2xs cursor-pointer text-center select-none active:scale-98"
+                              style={{ minHeight: "44px" }}
+                            >
+                              🎒 Save Field Vitals locally (Queue to Sync)
+                            </button>
+
+                          </div>
+                        )}
+
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* R-Grid: Offline Sync Queue Panel with Conflict Handlers */}
+            <div className="lg:col-span-5 space-y-4">
+              
+              {/* Sync controls */}
+              <div className="bg-white/40 border border-[#CFE6E3] p-5 rounded-3xl backdrop-blur-md space-y-4 shadow-2xs">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="text-[9px] font-black text-amber-600 uppercase tracking-widest block">Offline Sync Queue</span>
+                    <h3 className="text-xs font-black text-[#2B1B2E] uppercase">In-Field Telemetry Backlog</h3>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-black font-mono bg-[#E84FA0]/10 text-[#E84FA0] border border-[#FF6FB1]/10">
+                    {offlineQueue.length} Active Pending Files
+                  </span>
+                </div>
+
+                {isSyncing ? (
+                  <div className="p-4 bg-neutral-900 text-emerald-400 rounded-2xl font-mono text-[10px] space-y-1.5 border border-white/10 animate-fade-in text-left">
+                    {syncLogs.map((logStr, lIdx) => (
+                      <div key={lIdx} className="flex gap-1.5 items-start">
+                        <span className="text-pink-400 shrink-0 select-none">&gt;</span>
+                        <p className="leading-snug">{logStr}</p>
+                      </div>
+                    ))}
+                    <div className="pt-2 flex justify-center">
+                      <RefreshCw className="w-4 h-4 text-[#FF6FB1] animate-spin" />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {offlineQueue.length === 0 ? (
+                      <div className="p-8 text-center bg-white/60 border border-neutral-200/50 rounded-2xl space-y-2">
+                        <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+                        <h4 className="text-xs font-black uppercase text-neutral-800">Queue is completely synchronized</h4>
+                        <p className="text-[10px] text-neutral-500 font-bold max-w-xs mx-auto leading-normal">
+                          All rural field recordings have been integrated into our South African medical registries.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                        {offlineQueue.map((item) => (
+                          <div 
+                            key={item.id}
+                            className={`p-3.5 rounded-xl border text-xs text-left font-sans ${
+                              item.status === "conflicted" 
+                                ? "bg-red-50 border-red-300" 
+                                : "bg-white border-neutral-200"
+                            }`}
+                          >
+                            <div className="flex justify-between items-start gap-2">
+                              <div>
+                                <h4 className="font-extrabold text-[#2B1B2E]">{item.patientName}</h4>
+                                <div className="flex gap-1.5 font-mono text-[9px] mt-0.5 text-[#7A6B72]">
+                                  <span>BP: {item.systolic}/{item.diastolic}</span>
+                                  <span>•</span>
+                                  <span>T: {item.temperature}°C</span>
+                                  <span>•</span>
+                                  <span>W: {item.weight}kg</span>
+                                </div>
+                                <p className="text-[10px] text-neutral-600 mt-1 font-semibold line-clamp-1 italic">
+                                  "{item.notes || 'No notes registrados'}"
+                                </p>
+                              </div>
+
+                              <div className="shrink-0 flex flex-col items-end gap-1">
+                                <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                                  item.status === "conflicted" 
+                                    ? "bg-red-200 text-red-800 animate-pulse" 
+                                    : "bg-amber-100 text-amber-800"
+                                }`}>
+                                  {item.status}
+                                </span>
+                                {item.status === "conflicted" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setConflictItem(item)}
+                                    className="px-2.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-black text-[9px] uppercase tracking-wide cursor-pointer transition select-none"
+                                    style={{ minHeight: "36px" }}
+                                  >
+                                    Resolve
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {!isOfflineMode && offlineQueue.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={triggerSyncProcess}
+                        className="w-full py-3 bg-indigo-600 text-white hover:bg-indigo-700 rounded-xl font-black uppercase text-xs cursor-pointer select-none text-center shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-1.5"
+                        style={{ minHeight: "44px" }}
+                      >
+                        <UploadCloud className="w-4 h-4" />
+                        <span>Force Synchronize Sandbox ({offlineQueue.filter(q => q.status !== "synced").length})</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Conflict Resolution Workspace Modal / Accordion context and UI */}
+              {conflictItem && (
+                <div className="p-5 bg-gradient-to-br from-amber-50 to-orange-50 border border-orange-200 rounded-3xl space-y-4 shadow-sm animate-fade-in text-left">
+                  <div className="flex items-center gap-1.5">
+                    <GitMerge className="w-4.5 h-4.5 text-orange-600 animate-bounce" />
+                    <div>
+                      <h4 className="text-xs font-black text-orange-900 uppercase">Conflict Workspace</h4>
+                      <p className="text-[9.5px] text-orange-700 font-bold leading-none">Telemetry Collision Detected • {conflictItem.patientName}</p>
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-[#2B1B2E] font-medium leading-relaxed">
+                    A clinical vital reading was uploaded on the server within the same day. Please reconcile the field diagnostics safely.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Server Value */}
+                    <div className="p-3 bg-white/80 border border-neutral-200 rounded-xl">
+                      <span className="text-[8px] font-black text-neutral-500 uppercase tracking-wider block">1. Central Server DB</span>
+                      <div className="text-xs font-mono font-black text-neutral-900 mt-1 leading-tight">
+                        BP: {conflictItem.conflictWith?.systolic}/{conflictItem.conflictWith?.diastolic} mmHg
+                        <div className="text-[8.5px] text-neutral-500 block">Pulse: {conflictItem.conflictWith?.pulse} bpm</div>
+                        <div className="text-[8.5px] text-neutral-500 block">Recorded by: {conflictItem.conflictWith?.recordedBy}</div>
+                      </div>
+                    </div>
+
+                    {/* Field Value */}
+                    <div className="p-3 bg-amber-100/30 border border-amber-300 rounded-xl">
+                      <span className="text-[8px] font-black text-amber-700 uppercase tracking-wider block">2. CHW Field App Log</span>
+                      <div className="text-xs font-mono font-black text-amber-950 mt-1 leading-tight">
+                        BP: {conflictItem.systolic}/{conflictItem.diastolic} mmHg
+                        <div className="text-[8.5px] text-amber-800 block">Pulse: {conflictItem.pulse} bpm</div>
+                        <div className="text-[8.5px] text-amber-800 block">Recorded by: Community Health Worker</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Resolution Buttons */}
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => handleResolveConflictMerge(conflictItem)}
+                      className="w-full py-2.5 px-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white rounded-xl text-[10px] font-black uppercase cursor-pointer text-center hover:opacity-95 shadow-sm inline-flex items-center justify-center gap-1.5 select-none"
+                      style={{ minHeight: "44px" }}
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Chronological Safe-Merge (Recommended)</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleResolveConflictOverwrite(conflictItem)}
+                      className="w-full py-2 px-3 bg-[#E84FA0] text-white hover:bg-pink-600 rounded-xl text-[10px] font-black uppercase cursor-pointer text-center transition select-none"
+                      style={{ minHeight: "44px" }}
+                    >
+                      Overlay Server (CHW Field Entry Wins)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleResolveConflictDiscard(conflictItem)}
+                      className="w-full py-2 px-3 bg-white border border-neutral-300 hover:bg-neutral-50 text-neutral-700 rounded-xl text-[10px] font-bold uppercase cursor-pointer text-center transition select-none"
+                      style={{ minHeight: "44px" }}
+                    >
+                      Discard Field Log (Keep Server Version)
+                    </button>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+          </div>
+
         </div>
       )}
 

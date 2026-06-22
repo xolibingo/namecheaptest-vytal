@@ -405,8 +405,17 @@ app.post("/api/generate-video", async (req: Request, res: Response): Promise<voi
 
     res.json({ operationName: operation.name });
   } catch (err: any) {
-    console.error("Error starting video generation:", err);
-    res.status(500).json({ error: err.message || "Failed to start video generation" });
+    const errMsg = err?.message || "";
+    if (errMsg.includes("prepayment credits") || errMsg.includes("depleted") || errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+      console.warn("⚠️ API Warning: Gemini API User Key credits are depleted or exhausted in /api/generate-video.");
+      res.status(429).json({ 
+        error: "Your prepayment credits are depleted on your Google AI Studio project. Please configure billing or use simulated content.",
+        creditsDepleted: true
+      });
+    } else {
+      console.error("Error starting video generation:", err);
+      res.status(500).json({ error: errMsg || "Failed to start video generation" });
+    }
   }
 });
 
@@ -547,8 +556,17 @@ Do not issue direct prescriptions independently. Always reference when standard 
       completedAt: new Date().toISOString()
     });
   } catch (err: any) {
-    console.error("Clinical investigation error:", err);
-    res.status(500).json({ error: err.message || "Failed to complete investigation" });
+    const errMsg = err?.message || "";
+    if (errMsg.includes("prepayment credits") || errMsg.includes("depleted") || errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+      console.warn("⚠️ API Warning: Gemini API User Key credits are depleted or exhausted in /api/investigate.");
+      res.status(429).json({ 
+        error: "Your prepayment credits are depleted on your Google AI Studio project. Please configure billing or use simulated content.",
+        creditsDepleted: true
+      });
+    } else {
+      console.error("Clinical investigation error:", err);
+      res.status(500).json({ error: errMsg || "Failed to complete investigation" });
+    }
   }
 });
 
@@ -624,8 +642,17 @@ Scope: Counsel them warmly on nutrition, fetal counts, and routine clinical ANC 
       });
 
     } catch (err: any) {
-      console.error("Error connecting to Gemini Live:", err);
-      clientWs.send(JSON.stringify({ error: "Failed to establish Live session Code: " + err.message }));
+      const errMsg = err?.message || "";
+      if (errMsg.includes("prepayment credits") || errMsg.includes("depleted") || errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED")) {
+        console.warn("⚠️ WebSocket Live Session Warning: Gemini API Client credits are depleted. Falling back to offline.");
+        clientWs.send(JSON.stringify({ 
+          error: "API credits depleted. Talk continuously with the simulated companion below!",
+          creditsDepleted: true 
+        }));
+      } else {
+        console.error("Error connecting to Gemini Live:", err);
+        clientWs.send(JSON.stringify({ error: "Failed to establish Live session Code: " + errMsg }));
+      }
       clientWs.close();
     }
   });

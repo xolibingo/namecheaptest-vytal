@@ -123,6 +123,8 @@ interface PatientPortalProps {
   postpartumCheckups?: PostpartumCheckup[];
   onUpdatePostpartumCheckup?: (updated: PostpartumCheckup) => void;
   hospitalVisits?: HospitalVisit[];
+  appLanguage?: string;
+  onLanguageChange?: (lang: string) => void;
 }
 
 export default function PatientPortal({
@@ -153,7 +155,9 @@ export default function PatientPortal({
   onToggleOfflineMode,
   postpartumCheckups = [],
   onUpdatePostpartumCheckup,
-  hospitalVisits = []
+  hospitalVisits = [],
+  appLanguage: externalLanguage,
+  onLanguageChange
 }: PatientPortalProps) {
   // Plan and subscription state managers
   const [sessionPlan, setSessionPlan] = useState<"lula" | "premium" | "sadc">(() => {
@@ -209,10 +213,16 @@ export default function PatientPortal({
 
   const details = getPatientDetails();
   
-  // Real-time language state: English, siSwati, Setswana + 5 African (isiZulu, isiXhosa, Yoruba, Kiswahili, Amharic) + French
+  // Real-time language state: English, siSwati, Setswana + 5 African (isiZulu, isiXhosa, Yoruba, Kiswahili, Amharic) + French + Portuguese
   const [appLanguage, setAppLanguage] = useState<
-    "English" | "siSwati" | "Setswana" | "isiZulu" | "isiXhosa" | "Yoruba" | "Kiswahili" | "Amharic" | "Français"
+    "English" | "siSwati" | "Setswana" | "isiZulu" | "isiXhosa" | "Yoruba" | "Kiswahili" | "Amharic" | "Français" | "Português"
   >("English");
+
+  useEffect(() => {
+    if (externalLanguage) {
+      setAppLanguage(externalLanguage as any);
+    }
+  }, [externalLanguage]);
   
   // Local state for the pregnancy stages slider setup
   const [calendarSubTab, setCalendarSubTab] = useState<"pregnancy" | "postpartum" | "visits">("pregnancy");
@@ -639,10 +649,29 @@ export default function PatientPortal({
       btnSubmit: "Soumettre Rapport Clinique",
       selectLang: "Choisir la Langue",
       aboutApp: "Un assistant de maternité autonome, commandé par la voix, développé avec les cliniques SADC.",
+    },
+    Português: {
+      appName: "Vytal Companheiro",
+      homeTitle: "Fases da Gravidez",
+      completed: "Semanas Concluídas",
+      remaining: "Semanas Restantes",
+      trimester: "Segundo Trimestre Core",
+      wellnessScore: "Pontuação de Bem-estar",
+      askVytal: "Perguntar ao Vytal AI",
+      careTeam: "Equipe de Cuidados",
+      selfReports: "Histórico de Relatórios",
+      newReport: "Adicionar Relatório Diário",
+      profileSettings: "Perfil & Configurações",
+      welcomeMsg: "Olá, Kelebogile 👋",
+      today: "Hoje, 19 de Junho",
+      askPlaceholder: "Pressione abaixo para falar ou digite...",
+      btnSubmit: "Enviar Relatório Clínico",
+      selectLang: "Escolher Idioma",
+      aboutApp: "Um assistente materno de voz independente de rede, desenhado com clínicas SADC.",
     }
   };
 
-  const currentLangPack = langPack[appLanguage];
+  const currentLangPack = langPack[appLanguage] || langPack.English;
 
   const tabsTranslations: {[key: string]: {[key: string]: string}} = {
     English: { tabHome: "Home", tabCalendar: "Calendar", tabInsights: "Ask Vytal", tabCommunity: "Peer Hub", tabAcademy: "Academy", tabReports: "Reports", tabProfile: "Profile", emergencySos: "🚨 Quick Emergency", prenatalQuiz: "Pregnancy Quiz", quizDesc: "Test your prenatal nutrition and wellness knowledge", mythBust: "Myth vs Fact", mythDesc: "Pop common pregnancy myths with real clinical science" },
@@ -653,7 +682,8 @@ export default function PatientPortal({
     Yoruba: { tabHome: "Ile", tabCalendar: "Kalẹnda", tabInsights: "Bi Vytal lere", tabCommunity: "Awujọ", tabAcademy: "Ile-ẹkọ", tabReports: "Gba Ìròyìn", tabProfile: "Profaili", emergencySos: "🚨 Pajawiri Kankan", prenatalQuiz: "Idanwo Ilera Oyun", quizDesc: "Ṣayẹwo imọ rẹ nipa ilera", mythBust: "Asan ati Otitọ", mythDesc: "Tu awọn asan oyun nipa lilo imọ-jinlẹ" },
     Kiswahili: { tabHome: "Nyumbani", tabCalendar: "Kalenda", tabInsights: "Uliza Vytal", tabCommunity: "Peer Hub", tabAcademy: "Chuo", tabReports: "Ripoti", tabProfile: "Wasifu", emergencySos: "🚨 Dharura Haraka", prenatalQuiz: "Maswali ya Uzazi", quizDesc: "Pima ujuzi wako wa lishe ya uzazi", mythBust: "Ukweli au Uongo", mythDesc: "Vunja dhana potofu kwa sayansi ya matibabu" },
     Amharic: { tabHome: "ዋና ገጽ", tabCalendar: "ቀን መቁጠሪያ", tabInsights: "ቪታል ጠይቅ", tabCommunity: "ማህበረሰብ", tabAcademy: "አካዳሚ", tabReports: "ሪፖርቶች", tabProfile: "መገለጫ", emergencySos: "🚨 የአስቸኳይ ጊዜ", prenatalQuiz: "የእርግዝና ጥያቄዎች", quizDesc: "የእርግዝና አመጋገብ እውቀትዎን ይፈትሹ", mythBust: "እውነት ወይስ ውሸት", mythDesc: "የተለመዱ የእርግዝና ወሬዎችን በህክምና ሳይንስ መለየት" },
-    Français: { tabHome: "Accueil", tabCalendar: "Calendrier", tabInsights: "Demander", tabCommunity: "Échanges", tabAcademy: "Académie", tabReports: "Rapports", tabProfile: "Profil", emergencySos: "🚨 Urgence SOS", prenatalQuiz: "Quiz de Grossesse", quizDesc: "Testez vos connaissances en nutrition prénatale", mythBust: "Mythe vs Réalité", mythDesc: "Démontez les fausses croyances prénatales" }
+    Français: { tabHome: "Accueil", tabCalendar: "Calendrier", tabInsights: "Demander", tabCommunity: "Échanges", tabAcademy: "Académie", tabReports: "Rapports", tabProfile: "Profil", emergencySos: "🚨 Urgence SOS", prenatalQuiz: "Quiz de Grossesse", quizDesc: "Testez vos connaissances en nutrition prénatale", mythBust: "Mythe vs Réalité", mythDesc: "Démontez les fausses croyances prénatales" },
+    Português: { tabHome: "Início", tabCalendar: "Calendário", tabInsights: "Perguntar Vytal", tabCommunity: "Peer Hub", tabAcademy: "Academia", tabReports: "Relatórios", tabProfile: "Perfil", emergencySos: "🚨 Emergência Rápida", prenatalQuiz: "Quiz Pré-natal", quizDesc: "Teste seu conhecimento de nutrição pré-natal", mythBust: "Mito ou Verdade", mythDesc: "Desmistifique mitos comuns da gravidez com ciência" }
   };
 
   const t = (key: string, defaultValue: string) => {
@@ -1010,7 +1040,13 @@ export default function PatientPortal({
           <Globe2 className="w-3.5 h-3.5 absolute left-2.5 top-1/2 transform -translate-y-1/2 text-[#4F7066] z-10 pointer-events-none" />
           <select
             value={appLanguage}
-            onChange={(e) => setAppLanguage(e.target.value as any)}
+            onChange={(e) => {
+              const newLang = e.target.value;
+              setAppLanguage(newLang as any);
+              if (onLanguageChange) {
+                onLanguageChange(newLang);
+              }
+            }}
             className="appearance-none bg-white/70 hover:bg-white border border-white/60 text-[#2B1B2E] font-extrabold text-[10px] pl-7 pr-6 py-1.5 rounded-xl shadow-xs focus:outline-none focus:ring-1 focus:ring-[#4F7066] cursor-pointer backdrop-blur-md transition-all font-sans"
             id="vytal-lang-switcher"
           >
@@ -1023,6 +1059,7 @@ export default function PatientPortal({
             <option value="Kiswahili">🇰🇪 SW</option>
             <option value="Amharic">🇪🇹 AM</option>
             <option value="Français">🇫🇷 FR</option>
+            <option value="Português">🇵🇹 PT</option>
           </select>
           <div className="absolute right-2 top-1/2 transform -translate-y-1/2 pointer-events-none text-[8px] text-[#2B1B2E]">
             ▼
