@@ -326,6 +326,7 @@ const getInterpolatedMilestone = (week: number): MilestoneData => {
 export default function WeeklyMilestones({ currentWeek, appLanguage }: WeeklyMilestonesProps) {
   const [selectedWeek, setSelectedWeek] = useState(currentWeek);
   const [activeSegment, setActiveSegment] = useState<"fetal" | "maternal" | "checklist">("fetal");
+  const [visualMode, setVisualMode] = useState<"fruit" | "gif">("fruit");
 
   // Keep selected week synchronized when the parent shifts current week
   useEffect(() => {
@@ -540,27 +541,77 @@ export default function WeeklyMilestones({ currentWeek, appLanguage }: WeeklyMil
             </span>
           </div>
 
-          {/* SADC Fruit size comparative preview */}
-          <div className="my-3 flex flex-col items-center justify-center relative">
-            <div className="w-24 h-24 rounded-full bg-white/70 border border-[#FFF3F7] shadow-3xs flex items-center justify-center animate-bounce-slow overflow-hidden">
-              <span className="text-3xl filter saturate-150 drop-shadow-xs">
-                {selectedWeek <= 5 ? "🌱" :
-                 selectedWeek <= 10 ? "🍒" :
-                 selectedWeek <= 15 ? "🥑" :
-                 selectedWeek <= 20 ? "🥭" :
-                 selectedWeek <= 25 ? "🍍" :
-                 selectedWeek <= 30 ? "🥔" :
-                 selectedWeek <= 35 ? "🍈" : "🍉"}
-              </span>
+          {/* Interactive display mode: Fruit vs Milestone GIF */}
+          <div className="my-2.5 flex flex-col items-center justify-center relative space-y-2">
+            <div className="flex bg-[#E2EBE5]/55 p-0.5 border border-[#C6DFD7] rounded-lg text-[8px] font-black uppercase">
+              <button
+                type="button"
+                onClick={() => setVisualMode("fruit")}
+                className={`px-2 py-0.5 rounded cursor-pointer transition-all ${
+                  visualMode === "fruit" ? "bg-[#4F7066] text-white shadow-3xs" : "text-[#7A6B72]"
+                }`}
+              >
+                🥑 Fruit Size
+              </button>
+              <button
+                type="button"
+                onClick={() => setVisualMode("gif")}
+                className={`px-2 py-0.5 rounded cursor-pointer transition-all ${
+                  visualMode === "gif" ? "bg-[#4F7066] text-white shadow-3xs" : "text-[#7A6B72]"
+                }`}
+              >
+                🎬 Milestone GIF
+              </button>
             </div>
-            <div className="mt-2 bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-xl border border-pink-100 max-w-full">
-              <span className="text-[8px] font-extrabold uppercase text-[#7A6B72] block">
-                {trans.comparative}
-              </span>
-              <span className="text-[10px] font-black text-[#2B1B2E] leading-tight">
-                {activeMilestone.sizeComparisonLocal}
-              </span>
-            </div>
+
+            {visualMode === "fruit" ? (
+              <>
+                <div className="w-24 h-24 rounded-full bg-white/70 border border-[#FFF3F7] shadow-3xs flex items-center justify-center animate-bounce-slow overflow-hidden">
+                  <span className="text-3xl filter saturate-150 drop-shadow-xs">
+                    {selectedWeek <= 5 ? "🌱" :
+                     selectedWeek <= 10 ? "🍒" :
+                     selectedWeek <= 15 ? "🥑" :
+                     selectedWeek <= 20 ? "🥭" :
+                     selectedWeek <= 25 ? "🍍" :
+                     selectedWeek <= 30 ? "🥔" :
+                     selectedWeek <= 35 ? "🍈" : "🍉"}
+                  </span>
+                </div>
+                <div className="bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-xl border border-pink-100 max-w-full">
+                  <span className="text-[8px] font-extrabold uppercase text-[#7A6B72] block leading-none mb-0.5">
+                    {trans.comparative}
+                  </span>
+                  <span className="text-[10px] font-black text-[#2B1B2E] leading-tight">
+                    {activeMilestone.sizeComparisonLocal}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="w-40 h-28 rounded-2xl bg-[#2B1B2E] border border-white/20 flex flex-col items-center justify-center overflow-hidden shadow-md relative group select-none">
+                <span className="absolute top-1 right-1 bg-[#4F7066] text-white text-[7px] font-black px-1.5 py-0.5 rounded-full z-10 select-none uppercase tracking-wider animate-pulse">
+                  milestone
+                </span>
+                <img 
+                  src="/assets/milestone_progress.gif" 
+                  alt="Pregnancy Milestone Progression GIF"
+                  referrerPolicy="no-referrer"
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    const fallbackEl = document.getElementById("gif-ultrasound-fallback");
+                    if (fallbackEl) fallbackEl.classList.remove("hidden");
+                  }}
+                />
+                <div id="gif-ultrasound-fallback" className="absolute inset-0 flex flex-col items-center justify-center p-2 bg-gradient-to-b from-[#2B1B2E] to-[#1C111E] text-white">
+                  <div className="relative w-10 h-10 rounded-full border border-pink-400/35 flex items-center justify-center animate-pulse">
+                    <div className="w-7 h-7 rounded-full bg-pink-500/10 border border-dashed border-pink-400/70 flex items-center justify-center animate-spin" style={{ animationDuration: '8s' }} />
+                    <span className="absolute text-xs">👶</span>
+                  </div>
+                  <span className="text-[8px] font-black uppercase text-pink-300 mt-1">Ultrasound Loop</span>
+                  <span className="text-[6.5px] text-neutral-400 font-bold mt-0.5">milestone_progress.gif</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Precision Metrics */}

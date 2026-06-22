@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from "react";
+import { motion } from "motion/react";
 import PatientPortal from "./components/PatientPortal";
 import ClinicianPortal from "./components/ClinicianPortal";
-import { Clinician, PatientReport, VitalsLog, MaternalMeeting, PostpartumCheckup, HospitalVisit } from "./types";
+import EducationalVideoHub from "./components/EducationalVideoHub";
+import PatientLoginSignup from "./components/PatientLoginSignup";
+import { Clinician, Patient, PatientReport, VitalsLog, MaternalMeeting, PostpartumCheckup, HospitalVisit } from "./types";
 import { isFirebaseConfigured, db, handleFirestoreError, OperationType } from "./lib/firebase";
 import { collection, onSnapshot, setDoc, doc, getDocs } from "firebase/firestore";
 import { 
@@ -141,6 +144,136 @@ export default function App() {
   
   // Secure logged in clinician session (Sister Thandeka)
   const [sessionClinician, setSessionClinician] = useState<Clinician | null>(null);
+
+  // Secure logged in patient session (Mother)
+  const [sessionPatient, setSessionPatient] = useState<Patient | null>(() => {
+    try {
+      const saved = localStorage.getItem("vytal_patient_session");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.warn("Failed to parse patient session:", e);
+    }
+    return null;
+  });
+
+  const handlePatientLogin = (patient: Patient) => {
+    setSessionPatient(patient);
+    localStorage.setItem("vytal_patient_session", JSON.stringify(patient));
+    if (patient.gestationalWeeks) {
+      setCurrentWeek(patient.gestationalWeeks);
+    }
+  };
+
+  const handlePatientLogout = () => {
+    setSessionPatient(null);
+    localStorage.removeItem("vytal_patient_session");
+  };
+
+  const handleUssdSubmit = (inputValue: string) => {
+    const code = inputValue.trim();
+    setUssdError("");
+
+    if (!code) return;
+
+    if (!ussdSessionActive) {
+      if (code === "*120*375#" || code === "*120*0#" || code === "*375#" || code === "*0#") {
+        setUssdSessionActive(true);
+        setUssdMenuState("main");
+        setUssdInputVal("");
+      } else {
+        setUssdError("Invalid network channel. Dial *120*375# or *375# to establish SADC wireless hookup.");
+      }
+      return;
+    }
+
+    if (code === "0") {
+      if (ussdMenuState === "main") {
+        setUssdSessionActive(false);
+        setUssdMenuState("dial");
+      } else if (
+        ussdMenuState === "trimester" ||
+        ussdMenuState === "conditions" ||
+        ussdMenuState === "emergency" ||
+        ussdMenuState === "clinic"
+      ) {
+        setUssdMenuState("main");
+      } else if (ussdMenuState.startsWith("details_tri")) {
+        setUssdMenuState("trimester");
+      } else if (ussdMenuState.startsWith("details_cond")) {
+        setUssdMenuState("conditions");
+      } else if (ussdMenuState === "sos_triggered") {
+        setUssdSessionActive(false);
+        setUssdMenuState("dial");
+      }
+      setUssdInputVal("");
+      return;
+    }
+
+    if (ussdMenuState === "main") {
+      if (code === "1") {
+        setUssdMenuState("trimester");
+      } else if (code === "2") {
+        setUssdMenuState("conditions");
+      } else if (code === "3") {
+        setUssdMenuState("emergency");
+      } else if (code === "4") {
+        setUssdMenuState("clinic");
+      } else {
+        setUssdError("Invalid entry. Press 1, 2, 3, 4, or 0.");
+      }
+    } else if (ussdMenuState === "trimester") {
+      if (code === "1") {
+        setUssdMenuState("details_tri1");
+      } else if (code === "2") {
+        setUssdMenuState("details_tri2");
+      } else if (code === "3") {
+        setUssdMenuState("details_tri3");
+      } else {
+        setUssdError("Invalid trimester option. Press 1, 2, 3, or 0.");
+      }
+    } else if (ussdMenuState === "conditions") {
+      if (code === "1") {
+        setUssdMenuState("details_cond1");
+      } else if (code === "2") {
+        setUssdMenuState("details_cond2");
+      } else if (code === "3") {
+        setUssdMenuState("details_cond3");
+      } else if (code === "4") {
+        setUssdMenuState("details_cond4");
+      } else {
+        setUssdError("Invalid condition select. Press 1-4, or 0.");
+      }
+    } else if (ussdMenuState === "emergency") {
+      if (code === "1" || code === "2" || code === "3") {
+        setUssdMenuState("sos_triggered");
+        const alertNames = ["Pre-Eclampsia Seizure", "Remote Hemorrhage Emergency", "Heavy Persistent Maternal Fever"];
+        const selectedLabel = alertNames[parseInt(code) - 1] || "Emergency Call";
+
+        // Push immediate biometric warning to showcase in both patient and sister portals!
+        setVitalsLog(prev => [
+          ...prev,
+          {
+            id: `v-ussd-${Date.now()}`,
+            createdAt: new Date().toISOString(),
+            systolic: 170,
+            diastolic: 115,
+            temperature: 39.2,
+            heartRate: 125,
+            weight: 68,
+            notes: `🚨 CRITICAL USSD EMERGENCY SOS Broadcast: [${selectedLabel}] triggered offline via SADC *120*375#`
+          }
+        ]);
+      } else {
+        setUssdError("Invalid SOS option. Choose 1, 2, 3, or 0.");
+      }
+    } else if (ussdMenuState === "sos_triggered") {
+      setUssdSessionActive(false);
+      setUssdMenuState("dial");
+    } else {
+      setUssdError("Menu terminal is active. Press 0 to go back.");
+    }
+    setUssdInputVal("");
+  };
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -148,6 +281,16 @@ export default function App() {
   const [shouldShake, setShouldShake] = useState(false);
   const [showForgotPinModal, setShowForgotPinModal] = useState(false);
   const [showQuickContactsModal, setShowQuickContactsModal] = useState(false);
+
+  // SMS Share Knowledge modal states
+  const [smsModalData, setSmsModalData] = useState<{ isOpen: boolean; title: string; text: string } | null>(null);
+  const [isCopied, setIsCopied] = useState(false);
+
+  // USSD Pregnancy Companion Simulator states
+  const [ussdSessionActive, setUssdSessionActive] = useState<boolean>(false);
+  const [ussdMenuState, setUssdMenuState] = useState<string>("dial"); // "dial" | "main" | "trimester" | "conditions" | "emergency" | "clinic" | "details_tri1" ...
+  const [ussdInputVal, setUssdInputVal] = useState<string>("");
+  const [ussdError, setUssdError] = useState<string>("");
 
   // Offline-first simulation state
   const [isOfflineMode, setIsOfflineMode] = useState<boolean>(false);
@@ -1151,6 +1294,273 @@ export default function App() {
               </div>
             </div>
 
+            {/* SADC TELECOM OFFLINE USSD COMPANION SIMULATOR */}
+            <div className="p-6 bg-gradient-to-b from-[#142622] to-[#0D1815] border border-emerald-900 rounded-3xl text-left space-y-6 shadow-xl relative overflow-hidden" id="sadc-ussd-simulator-panel">
+              {/* Decorative top green laser accent */}
+              <div className="absolute top-0 inset-x-0 h-1 bg-emerald-500/20"></div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                
+                {/* Left info column */}
+                <div className="lg:col-span-6 space-y-4">
+                  <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase bg-emerald-950/80 text-emerald-400 px-3 py-1 rounded-full border border-emerald-800/40 tracking-wider">
+                    📶 ZERO-DATA TELECOM ACCESS CHANNEL
+                  </span>
+                  <h3 className="text-xl sm:text-2xl font-black text-white uppercase leading-tight tracking-tight">
+                    SADC USSD Offline Pregnancy Companion
+                  </h3>
+                  <p className="text-xs text-emerald-100/75 leading-relaxed font-semibold">
+                    In deep remote rural regions or informal clinics where cellular internet packages are highly unaffordable or cellular networks drop entirely, Southern African mothers use GSM USSD codes. 
+                  </p>
+                  
+                  <div className="p-4 bg-emerald-950/40 border border-[#4F7066]/20 rounded-2xl space-y-2 text-xs">
+                    <strong className="text-emerald-400 text-[10px] uppercase block tracking-wider font-extrabold flex items-center gap-1.5">
+                      💡 Quick SADC Dialer Codes:
+                    </strong>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-emerald-200/90 font-mono">
+                      <div className="p-2 bg-[#142622] rounded-xl border border-emerald-900/40">
+                        <span className="text-emerald-400 font-extrabold select-all block">*120*375#</span>
+                        <span className="text-[9px] text-[#7A6B72] block mt-0.5">Primary Education Info & SOS</span>
+                      </div>
+                      <div className="p-2 bg-[#142622] rounded-xl border border-emerald-900/40">
+                        <span className="text-emerald-400 font-extrabold select-all block">*120*0#</span>
+                        <span className="text-[9px] text-[#7A6B72] block mt-0.5">Alternative Clinic Syncing</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-[#7A6B72] leading-tight font-semibold italic">
+                    💡 Click on the phone buttons or type in codes on the screen to simulate real-time pregnancy lookups, emergency dispatch notifications, and trimester details.
+                  </p>
+                </div>
+
+                {/* Right phone mockup column */}
+                <div className="lg:col-span-6 flex justify-center">
+                  <div className="w-68 p-4 bg-gradient-to-b from-[#222E2B] to-[#141C1A] border-4 border-neutral-800 rounded-[36px] shadow-2xl relative select-none">
+                    
+                    {/* Ear speaker detail */}
+                    <div className="w-12 h-1.5 bg-neutral-700 rounded-full mx-auto mb-3.5 border-t border-black"></div>
+
+                    {/* LCD SCREEN */}
+                    <div className="bg-[#1C2A20] border-4 border-[#0F1611] rounded-2xl p-3 h-56 flex flex-col justify-between shadow-inner relative overflow-hidden font-mono text-[10.5px] text-[#55E755] leading-normal uppercase">
+                      {/* Ambient screen grid lines */}
+                      <div className="absolute inset-0 bg-radial from-transparent to-black/10 pointer-events-none"></div>
+
+                      <div className="space-y-1 z-10 text-left">
+                        {ussdMenuState === "dial" && (
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center text-[9px] opacity-70 pb-0.5 border-b border-[#55E755]/20">
+                              <span>📶 SADC TEL</span>
+                              <span>12:00</span>
+                            </div>
+                            <p className="text-[#A5FFA5] font-black leading-tight text-center mt-2">Vytal Telecom SADC</p>
+                            <p className="text-[9px] opacity-80 text-center leading-tight">Dial USSD to Connect Wireless Gateway:</p>
+                            <p className="text-xs text-center text-white bg-[#0F1611]/60 py-1.5 rounded-lg border border-[#55E755]/10 mt-2 font-bold animate-pulse">
+                              {ussdInputVal || "*120*375#"}
+                            </p>
+                            <span className="text-[8.5px] opacity-50 block text-center mt-1">Press CALL to initialize connection</span>
+                          </div>
+                        )}
+
+                        {ussdMenuState === "main" && (
+                          <div className="space-y-1">
+                            <span className="text-[9px] opacity-65 block">SADC Vytal Web Gateway:</span>
+                            <p className="text-white font-bold pb-0.5 border-b border-[#55E755]/20">1. Trimester milestones</p>
+                            <p className="text-white font-bold">2. Condition warning flags</p>
+                            <p className="text-white font-bold">3. Emergency SOS Broadcast</p>
+                            <p className="text-white font-bold">4. Primary clinic clock</p>
+                            <div className="text-[9.5px] text-[#A5FFA5] font-extrabold mt-1">
+                              Select [1-4] & SEND: {ussdInputVal}
+                            </div>
+                          </div>
+                        )}
+
+                        {ussdMenuState === "trimester" && (
+                          <div className="space-y-1">
+                            <span className="text-[9px] opacity-65 block">Select Gestation Stage:</span>
+                            <p className="text-white">1. Weeks 1-12 (T1)</p>
+                            <p className="text-white">2. Weeks 13-26 (T2)</p>
+                            <p className="text-white">3. Weeks 27-40 (T3)</p>
+                            <div className="text-[9.5px] text-[#A5FFA5] mt-1">
+                              Option [1-3] or 0. Back: {ussdInputVal}
+                            </div>
+                          </div>
+                        )}
+
+                        {ussdMenuState === "conditions" && (
+                          <div className="space-y-0.5">
+                            <span className="text-[9px] opacity-65 block">SADC Awareness Registry:</span>
+                            <p className="text-white">1. Pre-eclampsia/Seizures</p>
+                            <p className="text-white">2. Gestational Diabetes</p>
+                            <p className="text-white">3. Iron Anemia Risk</p>
+                            <p className="text-white">4. Peripartum Heart</p>
+                            <div className="text-[9.5px] text-[#A5FFA5] mt-0.5">
+                              Select option (or 0. Back): {ussdInputVal}
+                            </div>
+                          </div>
+                        )}
+
+                        {ussdMenuState === "details_tri1" && (
+                          <div className="space-y-1 text-[#A5FFA5]">
+                            <p className="text-white font-bold border-b border-[#55E755]/20 select-none">Trimester 1 milestones</p>
+                            <p className="text-[9.5px] leading-relaxed">Organs grow. Heart pulse registers by week 6. Attend clinic fast.</p>
+                            <p className="text-[9px] opacity-75 mt-2">Press 0. Go back</p>
+                          </div>
+                        )}
+
+                        {ussdMenuState === "details_tri2" && (
+                          <div className="space-y-1 text-[#A5FFA5]">
+                            <p className="text-white font-bold border-b border-[#55E755]/20 select-none">Trimester 2 milestones</p>
+                            <p className="text-[9.5px] leading-relaxed">Muscles form. Keep track of gestational sugar spikes weekly.</p>
+                            <p className="text-[9px] opacity-75 mt-2">Press 0. Go back</p>
+                          </div>
+                        )}
+
+                        {ussdMenuState === "details_tri3" && (
+                          <div className="space-y-1 text-[#A5FFA5]">
+                            <p className="text-white font-bold border-b border-[#55E755]/20 select-none">Trimester 3 milestones</p>
+                            <p className="text-[9.5px] leading-relaxed font-bold">Lungs mature. Count baby physical kick signals daily!</p>
+                            <p className="text-[9.5px] opacity-75 mt-2">Press 0. Go back</p>
+                          </div>
+                        )}
+
+                        {ussdMenuState === "details_cond1" && (
+                          <div className="space-y-0.5 text-[#55E755]">
+                            <p className="text-white font-bold border-b border-[#55E755]/20">Pre-Eclampsia Signs</p>
+                            <p className="text-[9.5px] leading-tight font-semibold">🚨 Persistent headache, blurry sight, upper belly cramps, sudden hands swelling.</p>
+                            <p className="text-[9px] opacity-75 mt-1">Press 0. Return</p>
+                          </div>
+                        )}
+
+                        {ussdMenuState === "details_cond2" && (
+                          <div className="space-y-0.5 text-[#55E755]">
+                            <p className="text-white font-bold border-b border-[#55E755]/20">gestational diabetes</p>
+                            <p className="text-[9.5px] leading-tight font-semibold">🚨 Continuous thirst, fast urination. Exercise 20 min daily.</p>
+                            <p className="text-[9px] opacity-75 mt-1">Press 0. Return</p>
+                          </div>
+                        )}
+
+                        {ussdMenuState === "details_cond3" && (
+                          <div className="space-y-0.5 text-[#55E755]">
+                            <p className="text-white font-bold border-b border-[#55E755]/20">Anemia warning</p>
+                            <p className="text-[9.5px] leading-tight font-semibold">🚨 Pale gums, severe weakness, fast breathing. Avoid coffee.</p>
+                            <p className="text-[9px] opacity-75 mt-1">Press 0. Return</p>
+                          </div>
+                        )}
+
+                        {ussdMenuState === "details_cond4" && (
+                          <div className="space-y-0.5 text-[#55E755]">
+                            <p className="text-white font-bold border-b border-[#55E755]/20">PPCM warnings</p>
+                            <p className="text-[9.5px] leading-tight font-semibold">🚨 Intense breath blocks when lying flat, coughing, fast palpitations.</p>
+                            <p className="text-[9px] opacity-75 mt-1">Press 0. Return</p>
+                          </div>
+                        )}
+
+                        {ussdMenuState === "emergency" && (
+                          <div className="space-y-1">
+                            <span className="text-[9px] opacity-60 text-rose-400 block font-bold">⚠️ SADC EMERGENCY DISPATCH:</span>
+                            <p className="text-white">1. Blood Pressure / Seizure</p>
+                            <p className="text-white">2. Heavy Bleeding</p>
+                            <p className="text-white">3. Fever / Shivering</p>
+                            <div className="text-[9.5px] text-rose-400 font-extrabold mt-1">
+                              Select SOS [1-3] (or 0. Cancel): {ussdInputVal}
+                            </div>
+                          </div>
+                        )}
+
+                        {ussdMenuState === "clinic" && (
+                          <div className="space-y-1 text-[#A5FFA5]">
+                            <p className="text-white font-bold border-b border-[#55E755]/20">Mbabane Clinic</p>
+                            <p className="text-[9px] leading-relaxed">Hrs: Mon-Fri 08h00-17h00</p>
+                            <p className="text-[9px] leading-relaxed">Supervisor: Sister Kunene</p>
+                            <p className="text-[9px] leading-relaxed">Hotline: +268 2404 2111</p>
+                            <p className="text-[9px] opacity-75 mt-1">Press 0. Go back</p>
+                          </div>
+                        )}
+
+                        {ussdMenuState === "sos_triggered" && (
+                          <div className="space-y-1 text-rose-400 font-bold">
+                            <p className="text-white border-b border-rose-500/20 text-center animate-pulse">📢 SOS DISPATCHED!</p>
+                            <p className="text-[9.5px] leading-normal text-slate-100">Sister Thandeka notified. Dr. Masuku flagged. Biometric logs generated instantly.</p>
+                            <p className="text-[9px] text-[#A5FFA5] mt-1 text-center">Press 0 to exit terminal</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Display input errors or connection confirmations */}
+                      <div className="text-[8.5px] font-bold text-slate-300 border-t border-[#55E755]/10 pt-1 flex justify-between select-none">
+                        <span className="text-rose-400 max-w-[120px] truncate">{ussdError}</span>
+                        <span className="opacity-60">{ussdSessionActive ? "Sync Active" : "No Signal"}</span>
+                      </div>
+                    </div>
+
+                    {/* PHYSICAL BUTTON LAYER */}
+                    <div className="mt-4 grid grid-cols-3 gap-2.5 px-0.5 pb-0.5">
+                      
+                      {/* Interactive Dialer navigation actions */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUssdInputVal("");
+                          setUssdError("");
+                        }}
+                        className="py-1.5 bg-[#B84040] hover:bg-rose-900 text-white text-[9px] font-black tracking-wider rounded-lg border-b-2 border-rose-950 active:translate-y-0.5 transition-all text-center cursor-pointer"
+                      >
+                        CLEAR
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (ussdInputVal.length > 0) {
+                            setUssdInputVal(ussdInputVal.slice(0, -1));
+                          }
+                        }}
+                        className="py-1.5 bg-neutral-600 hover:bg-neutral-700 text-neutral-100 text-[9px] font-black tracking-wider rounded-lg border-b-2 border-neutral-800 active:translate-y-0.5 transition-all text-center cursor-pointer"
+                      >
+                        DEL
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!ussdInputVal) {
+                            // Quick fill for easier testing
+                            setUssdInputVal("*120*375#");
+                          } else {
+                            handleUssdSubmit(ussdInputVal);
+                          }
+                        }}
+                        className="py-1.5 bg-[#3B7A57] hover:bg-emerald-950 text-white text-[9px] font-black tracking-wider rounded-lg border-b-2 border-emerald-900 active:translate-y-0.5 transition-all text-center cursor-pointer"
+                      >
+                        {ussdSessionActive ? "SEND" : "CALL"}
+                      </button>
+
+                      {/* Numeric values */}
+                      {["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"].map((btn) => {
+                        return (
+                          <button
+                            key={btn}
+                            type="button"
+                            onClick={() => {
+                              if (ussdInputVal.length < 12) {
+                                setUssdInputVal(ussdInputVal + btn);
+                              }
+                            }}
+                            className="p-2.5 bg-[#2E3C38] hover:bg-[#3C514B] text-slate-100 text-xs font-extrabold select-none rounded-xl border-b-2 border-[#1E2724] active:translate-y-0.5 transition-all text-center cursor-pointer flex flex-col items-center justify-center"
+                          >
+                            <span>{btn}</span>
+                          </button>
+                        );
+                      })}
+
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
             {/* 1. COMPREHENSIVE AFRICAN & RARE PREGNANCY CONDITIONS AWARENESS HUB */}
             <div className="p-6 bg-[#FCF8F5] border border-pink-200/50 rounded-3xl space-y-6 shadow-xs animate-fade-in" id="african-maternal-awareness-panel">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-pink-100 pb-4">
@@ -1280,6 +1690,31 @@ export default function App() {
                             </ul>
                           </div>
 
+                        </div>
+
+                        {/* Share Knowledge Button for SMS copy/sending */}
+                        <div className="flex flex-col sm:flex-row gap-2.5 items-center justify-between p-4 bg-gradient-to-r from-pink-50/50 to-amber-50/30 border border-[#FF6FB1]/20 rounded-2xl">
+                          <div className="text-left">
+                            <h5 className="text-[11px] font-black uppercase text-[#2B1B2E] tracking-tight">Support Network Broadcast</h5>
+                            <p className="text-[9px] text-[#7A6B72] font-semibold leading-tight mt-0.5">
+                              Generate an SMS-ready health tip of {activeAwarenessCond.name} for your friends, family or community care contacts.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const smsText = `🤰 VYTAL CARE SUMMARY: ${activeAwarenessCond.name.toUpperCase()}\n\n🚨 WARNING RED FLAGS:\n${activeAwarenessCond.signals.map(s => `• ${s}`).join('\n')}\n\n🛡️ CLINICAL PRECAUTIONS:\n${activeAwarenessCond.precautions.map(p => `• ${p}`).join('\n')}\n\nSent via Vytal Companion App - Empowering SADC Maternal Safety.`;
+                              setSmsModalData({
+                                isOpen: true,
+                                title: activeAwarenessCond.name,
+                                text: smsText
+                              });
+                              setIsCopied(false);
+                            }}
+                            className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-[#E84FA0] to-[#FF6FB1] hover:from-[#d63e8f] hover:to-[#e25d9b] text-white text-[10px] font-extrabold uppercase rounded-xl cursor-pointer shadow-3xs flex items-center justify-center gap-1.5 shrink-0 transition-all active:scale-98"
+                          >
+                            💬 Share Knowledge
+                          </button>
                         </div>
 
                         {/* Action box: How Vytal empowers clinicians and patients to react */}
@@ -1473,6 +1908,9 @@ export default function App() {
               </div>
             </div>
 
+            {/* Educational pregnancy and platform video guides */}
+            <EducationalVideoHub />
+
           </div>
         )}
 
@@ -1512,34 +1950,45 @@ export default function App() {
 
               {/* Inner Portal App */}
               <div className="flex-1 overflow-hidden relative pb-1">
-                <PatientPortal 
-                  sharedReports={sharedReports}
-                  onAddReport={handleAddReport}
-                  currentWeek={currentWeek}
-                  setCurrentWeek={handleSetCurrentWeek}
-                  vitalsLog={vitalsLog}
-                  onAddVitals={(v) => setVitalsLog([ ...vitalsLog, { ...v, id: `v-${Date.now()}`, createdAt: new Date().toISOString() }])}
-                  communityPosts={communityPosts}
-                  communityComments={communityComments}
-                  onAddPost={handleAddPost}
-                  onAddComment={handleAddComment}
-                  onReportPost={handleReportPost}
-                  onReportComment={handleReportComment}
-                  onBlockUser={handleBlockUser}
-                  onUnblockUser={handleUnblockUser}
-                  blockedUsers={blockedUsers}
-                  safetyAuditLogs={safetyAuditLogs}
-                  moderationAppeals={moderationAppeals}
-                  onSubmitAppeal={handleSubmitAppeal}
-                  topicNotifications={topicNotifications}
-                  onUpdateTopicNotifications={handleUpdateTopicNotifications}
-                  maternalMeetings={maternalMeetings}
-                  isOfflineMode={isOfflineMode}
-                  onToggleOfflineMode={() => setIsOfflineMode(!isOfflineMode)}
-                  postpartumCheckups={postpartumCheckups}
-                  onUpdatePostpartumCheckup={handleUpdatePostpartumCheckup}
-                  hospitalVisits={hospitalVisits}
-                />
+                {sessionPatient ? (
+                  <PatientPortal 
+                    patientId={sessionPatient.id}
+                    onLogout={handlePatientLogout}
+                    sharedReports={sharedReports}
+                    onAddReport={handleAddReport}
+                    currentWeek={currentWeek}
+                    setCurrentWeek={handleSetCurrentWeek}
+                    vitalsLog={vitalsLog}
+                    onAddVitals={(v) => setVitalsLog([ ...vitalsLog, { ...v, id: `v-${Date.now()}`, createdAt: new Date().toISOString() }])}
+                    communityPosts={communityPosts}
+                    communityComments={communityComments}
+                    onAddPost={handleAddPost}
+                    onAddComment={handleAddComment}
+                    onReportPost={handleReportPost}
+                    onReportComment={handleReportComment}
+                    onBlockUser={handleBlockUser}
+                    onUnblockUser={handleUnblockUser}
+                    blockedUsers={blockedUsers}
+                    safetyAuditLogs={safetyAuditLogs}
+                    moderationAppeals={moderationAppeals}
+                    onSubmitAppeal={handleSubmitAppeal}
+                    topicNotifications={topicNotifications}
+                    onUpdateTopicNotifications={handleUpdateTopicNotifications}
+                    maternalMeetings={maternalMeetings}
+                    isOfflineMode={isOfflineMode}
+                    onToggleOfflineMode={() => setIsOfflineMode(!isOfflineMode)}
+                    postpartumCheckups={postpartumCheckups}
+                    onUpdatePostpartumCheckup={handleUpdatePostpartumCheckup}
+                    hospitalVisits={hospitalVisits}
+                  />
+                ) : (
+                  <PatientLoginSignup 
+                    onLoginSuccess={handlePatientLogin}
+                    onSocialSignup={(newPat) => {
+                      // Save new patient into local arrays if registered
+                    }}
+                  />
+                )}
               </div>
 
               {/* Virtual Home Button Indicator line bottom */}
@@ -1590,7 +2039,13 @@ export default function App() {
               />
             ) : (
               // Secure login bypass dialogue
-              <div className={`max-w-md mx-auto bg-white/60 border border-white p-8 rounded-3xl backdrop-blur-xl shadow-lg mt-12 text-left space-y-6 ${shouldShake ? "animate-shake" : ""}`} id="doctor-auth-card">
+              <motion.div 
+                className={`max-w-md mx-auto bg-white/60 border border-white p-8 rounded-3xl backdrop-blur-xl shadow-lg mt-12 text-left space-y-6 ${shouldShake ? "animate-shake" : ""}`} 
+                id="doctor-auth-card"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+              >
                 
                 <div className="text-center space-y-2">
                   <div className="w-12 h-12 bg-pink-100 text-[#E84FA0] border border-[#FF6FB1]/35 rounded-2xl flex items-center justify-center mx-auto">
@@ -1690,7 +2145,7 @@ export default function App() {
                   </div>
                 </div>
 
-              </div>
+              </motion.div>
             )}
 
           </div>
@@ -1844,6 +2299,91 @@ export default function App() {
               id="confirm-forgot-pin-close"
             >
               Acknowledged & Return
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* SMS Share Knowledge Modal */}
+      {smsModalData && smsModalData.isOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center p-4 z-[999]" id="sms-share-modal-overlay">
+          <div className="bg-white border-2 border-[#FF6FB1]/30 max-w-lg w-full rounded-3xl overflow-hidden shadow-2xl relative p-5 space-y-4 text-left animate-fade-in" id="sms-share-modal-box">
+            <button
+              type="button"
+              onClick={() => setSmsModalData(null)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full hover:bg-neutral-100 flex items-center justify-center text-neutral-500 cursor-pointer transition-all focus:outline-none"
+              id="close-sms-share-modal"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 bg-pink-50 p-2.5 rounded-2xl border border-pink-100">
+              <div className="w-10 h-10 bg-[#FF6FB1]/10 rounded-xl flex items-center justify-center text-[#FF6FB1] text-lg font-bold">
+                📱
+              </div>
+              <div className="text-left">
+                <h4 className="text-xs font-black text-[#2B1B2E] uppercase">SMS Broadcast Packager</h4>
+                <p className="text-[10px] text-pink-700 font-extrabold font-sans">Condition: {smsModalData.title}</p>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-[#7A6B72] font-semibold leading-normal">
+              Copy the SMS-ready summary of <b>Warning Red Flags</b> and <b>Clinical Precautions</b> below. You can send it directly to your partner, family members, or neighborhood support coordinators to keep them informed!
+            </p>
+
+            <div className="relative">
+              <textarea
+                readOnly
+                value={smsModalData.text}
+                className="w-full h-48 p-3.5 bg-neutral-50 border border-neutral-200 rounded-2xl text-[10.5px] text-neutral-800 font-mono focus:outline-none select-all leading-normal resize-none"
+                id="sms-textarea-preview"
+              />
+              <div className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(smsModalData.text);
+                    setIsCopied(true);
+                    setTimeout(() => setIsCopied(false), 2000);
+                  }}
+                  className={`px-3 py-1.5 text-[10px] font-bold rounded-lg cursor-pointer flex items-center gap-1 shadow-3xs transition-all ${
+                    isCopied 
+                      ? "bg-emerald-600 text-white" 
+                      : "bg-[#2B1B2E] text-white hover:bg-black"
+                  }`}
+                  id="sms-copy-button"
+                >
+                  {isCopied ? "✓ Copied!" : "📋 Copy to Clipboard"}
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3.5 pt-1">
+              <a
+                href={`sms:?&body=${encodeURIComponent(smsModalData.text)}`}
+                className="py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-black uppercase tracking-wider text-center rounded-xl cursor-pointer shadow-3xs transition-all flex items-center justify-center gap-1"
+                id="sms-href-link"
+              >
+                📥 Send Native SMS
+              </a>
+              <a
+                href={`https://wa.me/?text=${encodeURIComponent(smsModalData.text)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-2.5 bg-[#25D366] hover:bg-[#20ba59] text-white text-[10px] font-black uppercase tracking-wider text-center rounded-xl cursor-pointer shadow-3xs transition-all flex items-center justify-center gap-1"
+                id="whatsapp-href-link"
+              >
+                💬 WhatsApp Broadcast
+              </a>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSmsModalData(null)}
+              className="w-full py-2.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-[10px] font-black uppercase tracking-wider rounded-xl cursor-pointer transition-all"
+              id="close-sms-modal-action"
+            >
+              Cancel
             </button>
           </div>
         </div>
