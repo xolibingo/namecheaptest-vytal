@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import { Patient, VitalsLog, PatientReport, MaternalMeeting, PostpartumCheckup, HospitalVisit } from "../types";
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 import { 
@@ -42,6 +43,7 @@ import {
   Sparkles,
   Eye
 } from "lucide-react";
+import WeeklyMilestones from "./WeeklyMilestones";
 
 const InteractiveTrendChartTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
@@ -159,11 +161,40 @@ export default function PatientPortal({
   
   // Ask Vytal (AI section) states
   const [aiText, setAiText] = useState("");
-  const [aiChatHistory, setAiChatHistory] = useState<Array<{ role: "user" | "assistant"; text: string }>>([
-    { role: "assistant", text: "Sakubona! Dumela! Siyakwamukela! I am your Vytal AI Companion. You can say 'BabyBot' at any time to activate continuous speech emergency coordinate routing." }
-  ]);
+  const [aiChatHistory, setAiChatHistory] = useState<Array<{ role: "user" | "assistant"; text: string }>>(() => {
+    try {
+      const saved = localStorage.getItem("vytal_ai_chat_history");
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      console.warn("Failed to load conversational history from localStorage:", e);
+    }
+    return [
+      { role: "assistant", text: "Sakubona! Dumela! Siyakwamukela! I am your Vytal AI Companion. You can say 'BabyBot' at any time to activate continuous speech emergency coordinate routing." }
+    ];
+  });
   const [isAILoading, setIsAILoading] = useState(false);
   const [selectedTopic, setSelectedTopic] = useState<string>("Nutrition");
+  const [isListening, setIsListening] = useState(false);
+
+  // References for chat auto-scrolling & focus management
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync conversational history with localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem("vytal_ai_chat_history", JSON.stringify(aiChatHistory));
+    } catch (e) {
+      console.warn("Failed to persist conversation history to localStorage:", e);
+    }
+  }, [aiChatHistory]);
+
+  // Keep chat display scrolled to the newest messages
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [aiChatHistory, isAILoading]);
 
   // BabyBot emergency states
   const [babybotActive, setBabybotActive] = useState(false);
@@ -199,7 +230,7 @@ export default function PatientPortal({
   const [showAppealModal, setShowAppealModal] = useState(false);
   const [appealReasonText, setAppealReasonText] = useState("");
   const [appealContentText, setAppealContentText] = useState("");
-  const [chartMetric, setChartMetric] = useState<"bp" | "hr">("bp");
+  const [chartMetric, setChartMetric] = useState<"bp" | "hr" | "combined">("combined");
   const [isLeftSidebarOpen, setIsLeftSidebarOpen] = useState(false);
   const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
   const [simulatedActiveCall, setSimulatedActiveCall] = useState<string | null>(null);
@@ -582,45 +613,138 @@ export default function PatientPortal({
     }
   };
 
-  const handleAISimulateQuery = (topic: string) => {
-    setSelectedTopic(topic);
-    setIsAILoading(true);
-    
-    // Simulate smart cellular transcription processing
+  const triggerBabybotRescue = () => {
+    setBabybotActive(true);
+    setBabybotLoadingGeoloc(true);
     setTimeout(() => {
-      const userPrompt = `What advice do you have regarding prenatal ${topic}?`;
-      const reply = customAiReplies[appLanguage][topic] || "Our expert guidelines suggest monitoring vitals regularly and keeping in touch with Mbabane Centre.";
+      setBabybotLoadingGeoloc(false);
+      setBabybotLocation({ lat: -26.3056, lng: 31.1367 });
+      setLocatedHospital({
+        name: "Mbabane Government General Hospital",
+        phone: "+268-2404-2111",
+        distance: "4.2 km"
+      });
+    }, 1500);
+  };
+
+  const handleSendChatMessage = async (textToSend?: string) => {
+    const rawText = textToSend !== undefined ? textToSend : aiText;
+    const queryText = rawText?.trim();
+    if (!queryText) return;
+
+    // Clear typed text
+    setAiText("");
+    
+    // Add User message
+    const updatedHistory = [...aiChatHistory, { role: "user" as const, text: queryText }];
+    setAiChatHistory(updatedHistory);
+    setIsAILoading(true);
+
+    // Trigger babybot emergency check if keyword exists
+    if (queryText.toLowerCase().includes("babybot")) {
+      triggerBabybotRescue();
+    }
+
+    try {
+      const response = await fetch("/api/chat-companion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: updatedHistory,
+          language: appLanguage,
+          gestationalWeeks: currentWeek,
+          symptoms: [selectedSymptom],
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Chat service responded with an error");
+      }
+
+      const data = await response.json();
+      setAiChatHistory(prev => [...prev, { role: "assistant" as const, text: data.text }]);
+    } catch (err) {
+      console.error("Failed to query chat-companion:", err);
+      // Fallback
+      let matchingTopic = "Symptoms";
+      if (queryText.toLowerCase().includes("food") || queryText.toLowerCase().includes("spinach") || queryText.toLowerCase().includes("eat") || queryText.toLowerCase().includes("nutrition")) {
+        matchingTopic = "Nutrition";
+      } else if (queryText.toLowerCase().includes("sleep") || queryText.toLowerCase().includes("tire") || queryText.toLowerCase().includes("left side") || queryText.toLowerCase().includes("rest")) {
+        matchingTopic = "Rest";
+      } else if (queryText.toLowerCase().includes("movement") || queryText.toLowerCase().includes("walk") || queryText.toLowerCase().includes("kick")) {
+        matchingTopic = "Movement";
+      }
+      
+      const localeReplies = customAiReplies[appLanguage as keyof typeof customAiReplies] || customAiReplies.English;
+      const fallbackReply = (localeReplies as any)[matchingTopic] || 
+        "Thank you for asking. Our digital system suggests monitoring your blood pressure closely, staying well-hydrated, and coordinating with Mbabane Centre clinicians. If you experience severe headaches, swelling, or dizziness, please seek immediate help.";
       
       setAiChatHistory(prev => [
         ...prev,
-        { role: "user", text: userPrompt },
-        { role: "assistant", text: reply }
+        { role: "assistant" as const, text: fallbackReply }
       ]);
+    } finally {
       setIsAILoading(false);
-    }, 900);
+    }
+  };
+
+  const startVoiceListening = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      // Graceful fallback simulation
+      setIsListening(true);
+      setTimeout(() => {
+        setIsListening(false);
+        // Put in a prompt to show how we simulated/filled
+        const simulatedVoicePrompt = "Dumela BabyBot, locate my nearest clinic";
+        setAiText(simulatedVoicePrompt);
+        handleSendChatMessage(simulatedVoicePrompt);
+      }, 2000);
+      return;
+    }
+    
+    try {
+      const rec = new SpeechRecognition();
+      rec.continuous = false;
+      rec.interimResults = false;
+      rec.lang = appLanguage === "siSwati" ? "ss-SZ" : appLanguage === "Setswana" ? "tn-ZA" : appLanguage === "isiZulu" ? "zu-ZA" : "en-US";
+      
+      rec.onstart = () => {
+        setIsListening(true);
+      };
+      
+      rec.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript && transcript.trim() !== "") {
+          setAiText(transcript);
+          handleSendChatMessage(transcript);
+        }
+      };
+      
+      rec.onerror = (event: any) => {
+        console.warn("Speech recognition error:", event.error);
+        setIsListening(false);
+      };
+      
+      rec.onend = () => {
+        setIsListening(false);
+      };
+      
+      rec.start();
+    } catch (err) {
+      console.warn("Failed to initialize speech recognition:", err);
+      setIsListening(false);
+    }
+  };
+
+  const handleAISimulateQuery = (topic: string) => {
+    setSelectedTopic(topic);
+    const userPrompt = `What advice do you have regarding prenatal ${topic}?`;
+    handleSendChatMessage(userPrompt);
   };
 
   const handleCustomVoiceTranscription = (transcript: string) => {
-    setAiText(transcript);
-    setIsAILoading(true);
-    
-    setTimeout(() => {
-      let matchingTopic = "Symptoms";
-      if (transcript.toLowerCase().includes("food") || transcript.toLowerCase().includes("spinach") || transcript.toLowerCase().includes("eat")) {
-        matchingTopic = "Nutrition";
-      } else if (transcript.toLowerCase().includes("sleep") || transcript.toLowerCase().includes("tire") || transcript.toLowerCase().includes("left side")) {
-        matchingTopic = "Rest";
-      }
-      
-      const reply = customAiReplies[appLanguage][matchingTopic];
-      setAiChatHistory(prev => [
-        ...prev,
-        { role: "user", text: `"${transcript}"` },
-        { role: "assistant", text: `[Voice Parsed Triage]: ${reply}` }
-      ]);
-      setAiText("");
-      setIsAILoading(false);
-    }, 1100);
+    handleSendChatMessage(transcript);
   };
 
   const handleCreateReportSubmit = (e: React.FormEvent) => {
@@ -829,7 +953,7 @@ export default function PatientPortal({
                   {/* Weekly developmental local info */}
                   <div className="z-10 text-left max-w-[180px] mt-12 bg-white/30 p-2.5 rounded-2xl border border-white/35 backdrop-blur-sm">
                     <span className="text-[8px] font-bold bg-[#E84FA0] text-white px-2 py-0.5 rounded-full uppercase tracking-wider inline-block mb-1">
-                      Development
+                      My Stage
                     </span>
                     <h4 className="text-[11px] font-extrabold block text-[#2B1B2E] tracking-tight leading-tight uppercase">
                       {currentMilestone.milestone}
@@ -847,11 +971,17 @@ export default function PatientPortal({
                   </div>
                 </div>
 
+                {/* Newly developed interactive WeeklyMilestones explorer */}
+                <WeeklyMilestones 
+                  currentWeek={currentWeek} 
+                  appLanguage={appLanguage} 
+                />
+
                 {/* Info summary */}
                 <div className="p-3 bg-neutral-50/60 rounded-2xl border border-neutral-200">
                   <h4 className="text-[10px] font-black uppercase text-neutral-600 mb-1">💡 Development Insights</h4>
                   <p className="text-[10px] text-neutral-500 leading-normal">
-                    You have successfully completed over {currentWeek} weeks. Keep tracks of active kick metrics, hydrate at least 2L daily, and discuss with clinical workers if any rapid changes occur.
+                    You have successfully completed over {currentWeek} weeks. Keep track of active kick metrics, hydrate at least 2.5L-3.0L daily, and discuss with clinical workers if any sudden health changes occur.
                   </p>
                 </div>
               </div>
@@ -1251,30 +1381,18 @@ export default function PatientPortal({
                       </h4>
                     </div>
                     
-                    {/* Metrics Selector Toggles */}
-                    <div className="flex gap-1 bg-white border border-neutral-200 p-0.5 rounded-xl">
-                      <button
-                        type="button"
-                        onClick={() => setChartMetric("bp")}
-                        className={`text-[8.5px] font-black px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                          chartMetric === "bp" 
-                            ? "bg-[#4F7066] text-white shadow-3xs" 
-                            : "text-[#5F716A] hover:text-[#2B1B2E]"
-                        }`}
+                    {/* Metrics Selector Dropdown */}
+                    <div className="flex gap-1.5 items-center">
+                      <select
+                        value={chartMetric}
+                        onChange={(e) => setChartMetric(e.target.value as any)}
+                        className="text-[10px] font-black bg-white border border-[#D5E1DB] px-3 py-1.5 rounded-xl text-[#2B1B2E] cursor-pointer outline-none shadow-3xs hover:border-[#4F7066]/40 transition-colors"
+                        id="vitals-dropdown-filter"
                       >
-                        BP (mmHg)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setChartMetric("hr")}
-                        className={`text-[8.5px] font-black px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                          chartMetric === "hr" 
-                            ? "bg-[#4F7066] text-white shadow-3xs" 
-                            : "text-[#5F716A] hover:text-[#2B1B2E]"
-                        }`}
-                      >
-                        Heart Rate (BPM)
-                      </button>
+                        <option value="combined">📊 Combined Vitals</option>
+                        <option value="bp">🩺 Blood Pressure only</option>
+                        <option value="hr">💓 Heart Rate only</option>
+                      </select>
                     </div>
                   </div>
 
@@ -1346,13 +1464,54 @@ export default function PatientPortal({
                           tickLine={false}
                         />
                         <YAxis 
-                          domain={chartMetric === "bp" ? [60, 140] : [65, 155]} 
+                          domain={chartMetric === "bp" ? [60, 140] : chartMetric === "hr" ? [65, 155] : [55, 175]} 
                           tick={{ fill: "#5F716A", fontSize: 8, fontWeight: "bold" }}
                           axisLine={false}
                           tickLine={false}
                         />
                         <Tooltip content={<InteractiveTrendChartTooltip />} />
-                        {chartMetric === "bp" ? (
+                        {chartMetric === "combined" ? (
+                          <>
+                            <Area 
+                              type="monotone" 
+                              dataKey="systolic" 
+                              name="Systolic BP" 
+                              stroke="#4F7066" 
+                              strokeWidth={2.5}
+                              fillOpacity={0.15} 
+                              fill="url(#colorBP)" 
+                            />
+                            <Area 
+                              type="monotone" 
+                              dataKey="diastolic" 
+                              name="Diastolic BP" 
+                              stroke="#E84FA0" 
+                              strokeWidth={1.5}
+                              fillOpacity={0.10} 
+                              fill="url(#colorDia)" 
+                            />
+                            <Area 
+                              type="monotone" 
+                              dataKey="pulse" 
+                              name="Mother HR" 
+                              stroke="#7A6B72" 
+                              strokeWidth={1.5}
+                              strokeDasharray="3 3"
+                              fillOpacity={0} 
+                              fill="none" 
+                            />
+                            <Area 
+                              type="monotone" 
+                              dataKey="fetal" 
+                              name="Fetal Heart Rate" 
+                              stroke="#FF6FB1" 
+                              strokeWidth={1.2}
+                              strokeDasharray="4 4"
+                              fillOpacity={0} 
+                              fill="none" 
+                            />
+                          </>
+                        ) : chartMetric === "bp" ? (
                           <>
                             <Area 
                               type="monotone" 
@@ -2289,43 +2448,125 @@ export default function PatientPortal({
               </div>
 
               <div className="space-y-2 z-10 relative">
-                <span className="text-[9px] font-extrabold uppercase tracking-widest text-[#5F716A] block">Continuous Speech Voice Processor</span>
+                <span className="text-[9px] font-extrabold uppercase tracking-widest text-[#5F716A] block">Virtual Prenatal Assistant Hub</span>
                 
-                {/* Simulated conversations */}
-                <div className="p-3 bg-white/80 border border-white/60 rounded-2xl max-h-[140px] overflow-y-auto space-y-2.5 no-scrollbar">
-                  {aiChatHistory.map((chat, idx) => (
-                    <div 
-                      key={idx} 
-                      className={`text-[10.5px] p-2 rounded-xl text-left font-semibold ${
-                        chat.role === "user" 
-                          ? "bg-amber-50 text-[#2B1B2E] self-end border border-amber-200" 
-                          : "bg-emerald-50/60 text-[#2B1B2E] border border-emerald-100/40"
-                      }`}
-                    >
-                      <span className="text-[8px] uppercase tracking-widest block font-black opacity-60 mb-0.5">
-                        {chat.role === "user" ? "MAMA" : "VYTAL AI ASSISTANT"}
-                      </span>
-                      <p className="leading-tight leading-normal">"{chat.text}"</p>
-                    </div>
-                  ))}
-                  {isAILoading && (
-                    <div className="p-2 bg-emerald-50/50 rounded-xl text-[10px] font-bold text-[#4F7066] animate-pulse">
-                      🎙️ Transcribing & Triage Analyzing...
-                    </div>
-                  )}
+                {/* Conversations Area */}
+                <div className="p-3 bg-white/80 border border-white/60 rounded-2xl min-h-[160px] max-h-[220px] overflow-y-auto space-y-2.5 no-scrollbar flex flex-col">
+                  <AnimatePresence initial={false}>
+                    {aiChatHistory.map((chat, idx) => (
+                      <motion.div 
+                        key={idx} 
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.25 }}
+                        className={`text-[10.5px] p-2 rounded-xl text-left font-semibold ${
+                          chat.role === "user" 
+                            ? "bg-amber-50 text-[#2B1B2E] self-end border border-amber-200 ml-6" 
+                            : "bg-emerald-50/60 text-[#2B1B2E] border border-emerald-100/40 mr-6"
+                        }`}
+                      >
+                        <span className="text-[8px] uppercase tracking-widest block font-black opacity-60 mb-0.5">
+                          {chat.role === "user" ? "MAMA" : "VYTAL AI ASSISTANT"}
+                        </span>
+                        <p className="leading-tight leading-normal">"{chat.text}"</p>
+                      </motion.div>
+                    ))}
+
+                    {isAILoading && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        className="p-2.5 bg-emerald-50/60 text-[#2B1B2E] border border-emerald-100/40 mr-6 rounded-xl self-start flex items-center gap-1.5"
+                      >
+                        <span className="text-[8px] uppercase tracking-widest font-black opacity-60">Vytal AI is typing</span>
+                        <div className="flex gap-0.5 items-center">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#4F7066] animate-bounce" style={{ animationDelay: "0s" }} />
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#4F7066] animate-bounce" style={{ animationDelay: "0.15s" }} />
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#4F7066] animate-bounce" style={{ animationDelay: "0.3s" }} />
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  <div ref={chatEndRef} />
                 </div>
 
-                {/* Big mic trigger button styled beautifully in soft sage */}
-                <div className="flex gap-2 pt-2 items-center">
+                {/* Real-time Voice Recording Pulse Wave */}
+                {isListening && (
+                  <div className="flex items-center gap-2.5 bg-pink-50/95 border border-pink-100 p-2.5 rounded-2xl animate-pulse">
+                    <div className="flex gap-1 items-center shrink-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-ping" />
+                      <span className="w-1 h-3 bg-pink-500 rounded-xs animate-bounce" style={{ animationDelay: "0.1s" }} />
+                      <span className="w-1 h-4 bg-pink-500 rounded-xs animate-bounce" style={{ animationDelay: "0.2s" }} />
+                      <span className="w-1 h-2 bg-pink-500 rounded-xs animate-bounce" style={{ animationDelay: "0.3s" }} />
+                    </div>
+                    <span className="text-[9.5px] font-extrabold text-[#E84FA0] uppercase tracking-wider">
+                      🎙️ Speak now! Listening (siSwati / Setswana / EN)...
+                    </span>
+                  </div>
+                )}
+
+                {/* Quick Question Engagement Chips */}
+                <div className="flex flex-wrap gap-1.5 pt-1.5 pb-0.5 z-10 relative text-left">
+                  {[
+                    "Is this symptom normal?",
+                    "Find nearest clinic",
+                    "What signs of high BP should I check?",
+                    "Which food increases iron?"
+                  ].map((sh, sIdx) => (
+                    <button
+                      key={sIdx}
+                      type="button"
+                      onClick={() => {
+                        setAiText(sh);
+                        chatInputRef.current?.focus();
+                      }}
+                      className="bg-[#4F7066]/10 hover:bg-[#4F7066]/25 border border-[#4F7066]/20 text-[#4F7066] text-[9.5px] font-bold px-2.5 py-1 rounded-full transition-all cursor-pointer shadow-3xs hover:scale-102 flex items-center gap-1"
+                    >
+                      💡 <span>{sh}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Input Bar (Type message / Tap mic to speak) */}
+                <div className="flex items-center gap-1.5 pt-1">
                   <button
                     type="button"
-                    onClick={() => handleCustomVoiceTranscription("I have some body pain and swelling, babybot locate help")}
-                    className="flex-1 py-2.5 px-4 rounded-2xl text-[11px] font-black text-white bg-gradient-to-r from-[#4F7066] to-[#2B1B2E] hover:shadow-md transition-all active:scale-[0.98] cursor-pointer flex items-center justify-center gap-1.5"
+                    onClick={startVoiceListening}
+                    className={`p-2.5 rounded-xl transition-all cursor-pointer border shrink-0 ${
+                      isListening
+                        ? "bg-pink-500 text-white border-pink-500 animate-pulse scale-105"
+                        : "bg-white text-neutral-600 hover:text-[#4F7066] border-[#D5E1DB] hover:shadow-xs"
+                    }`}
+                    title={isListening ? "Stop voice listening" : "Start speaking with voice command"}
                   >
-                    <Mic className="w-3.5 h-3.5 text-white" />
-                    <span>Speak in siSwati / Setswana / EN</span>
+                    <Mic className={`w-4 h-4 ${isListening ? "animate-bounce" : ""}`} />
+                  </button>
+
+                  <input
+                    ref={chatInputRef}
+                    type="text"
+                    value={aiText}
+                    onChange={(e) => setAiText(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleSendChatMessage();
+                      }
+                    }}
+                    placeholder={isListening ? "Listening... Speak your query clearly" : "Type pregnancy question or 'BabyBot'..."}
+                    className="flex-1 bg-white border border-[#D5E1DB] text-[10.5px] font-semibold px-3 py-2.5 rounded-xl text-[#2B1B2E] placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-[#4F7066]"
+                  />
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendChatMessage()}
+                    disabled={isAILoading || !aiText.trim()}
+                    className="p-2.5 rounded-xl text-[#ffffff] bg-[#4F7066] hover:bg-[#3D574F] disabled:opacity-40 transition-all cursor-pointer border border-[#4F7066] shrink-0"
+                  >
+                    <Send className="w-3.5 h-3.5" />
                   </button>
                 </div>
+
               </div>
 
               {/* Tappable category chips */}
@@ -2346,6 +2587,27 @@ export default function PatientPortal({
                       {cat}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* Simulative Voice Commands helper bar */}
+              <div className="pt-1.5 border-t border-dotted border-[#D5E1DB] z-10 relative text-left">
+                <span className="text-[8px] font-bold text-[#5F716A] uppercase tracking-wider block mb-1">🎤 Simulate pre-recorded voice command:</span>
+                <div className="flex flex-wrap gap-1">
+                  <button
+                    onClick={() => handleSendChatMessage("Dumela, does sweet tea affect pregnancy blood pressure?")}
+                    type="button"
+                    className="bg-white hover:bg-neutral-50 border border-neutral-200 text-[9px] font-semibold px-2 py-1 rounded-lg"
+                  >
+                    "Dumela, sweet tea query"
+                  </button>
+                  <button
+                    onClick={() => handleSendChatMessage("I have some body pain and swelling, babybot locate help")}
+                    type="button"
+                    className="bg-white hover:bg-neutral-50 border border-neutral-200 text-[9px] font-semibold px-2 py-1 rounded-lg"
+                  >
+                    "Severe pain, BabyBot rescue"
+                  </button>
                 </div>
               </div>
 

@@ -301,6 +301,50 @@ export default function App() {
   // Feed in clinical vitals list
   const [vitalsLog, setVitalsLog] = useState<VitalsLog[]>([
     {
+      id: "v-pre-1",
+      patientId: "pat-2",
+      systolic: 112,
+      diastolic: 72,
+      pulse: 78,
+      temperature: 36.4,
+      weight: 69.5,
+      recordedBy: "Self",
+      createdAt: new Date(Date.now() - 3600000 * 24 * 28).toISOString() // 28 days ago
+    },
+    {
+      id: "v-pre-2",
+      patientId: "pat-2",
+      systolic: 114,
+      diastolic: 73,
+      pulse: 80,
+      temperature: 36.5,
+      weight: 70.0,
+      recordedBy: "Self",
+      createdAt: new Date(Date.now() - 3600000 * 24 * 21).toISOString() // 21 days ago
+    },
+    {
+      id: "v-pre-3",
+      patientId: "pat-2",
+      systolic: 115,
+      diastolic: 74,
+      pulse: 82,
+      temperature: 36.5,
+      weight: 70.6,
+      recordedBy: "Self",
+      createdAt: new Date(Date.now() - 3600000 * 24 * 14).toISOString() // 14 days ago
+    },
+    {
+      id: "v-pre-4",
+      patientId: "pat-2",
+      systolic: 116,
+      diastolic: 75,
+      pulse: 84,
+      temperature: 36.6,
+      weight: 71.0,
+      recordedBy: "Self",
+      createdAt: new Date(Date.now() - 3600000 * 24 * 7).toISOString() // 7 days ago
+    },
+    {
       id: "v-1",
       patientId: "pat-2",
       systolic: 118,
