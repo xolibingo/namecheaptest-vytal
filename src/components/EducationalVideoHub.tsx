@@ -16,6 +16,7 @@ interface VideoItem {
     sz: string[];
     tn: string[];
   };
+  localBlobUrl?: string;
 }
 
 const EDUCATIONAL_VIDEOS: VideoItem[] = [
@@ -144,27 +145,188 @@ export default function EducationalVideoHub() {
   const [genProgress, setGenProgress] = useState(0);
   const [genStep, setGenStep] = useState("");
 
+  // Real Veo state parameters 
+  const [videoAspectRatio, setVideoAspectRatio] = useState<"16:9" | "9:16">("16:9");
+  const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [imageMimeType, setImageMimeType] = useState<string>("");
+  const [customPromptText, setCustomPromptText] = useState("");
+  const [dragActive, setDragActive] = useState(false);
+
   const filteredVideos = videoList.filter(v => v.category === activeCategory);
 
-  const handleGenerateVideo = () => {
-    setIsGenerating(true);
-    setGenProgress(5);
-    setGenStep("Contacting AI Studio prenatal model gateway...");
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = () => {
+        setImageBase64(reader.result as string);
+        setImageMimeType(file.type);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
-    const interval = setInterval(() => {
-      setGenProgress(prev => {
-        if (prev >= 100) {
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      const reader = new FileReader();
+      reader.onload = () => {
+        setImageBase64(reader.result as string);
+        setImageMimeType(file.type);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleGenerateVideo = async () => {
+    setIsGenerating(true);
+    setGenProgress(2);
+    setGenStep("Contacting Vytal maternal model server...");
+
+    try {
+      const promptToUse = customPromptText.trim() 
+        ? customPromptText 
+        : `An expert pre-natal health consultant demonstrating how to address ${selectedTopic} during ${selectedTrimester}, realistic clinic demonstration`;
+
+      const startRes = await fetch("/api/generate-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: promptToUse,
+          aspectRatio: videoAspectRatio,
+          base64Image: imageBase64,
+          mimeType: imageMimeType
+        })
+      });
+
+      if (!startRes.ok) {
+        throw new Error("Failed to initialize Veo video generation job");
+      }
+
+      const { operationName } = await startRes.json();
+      setGenStep("Veo 3 generation started. Polling status...");
+
+      let done = false;
+      let checkAttempts = 0;
+      const maxAttempts = 60; // 5 minutes timeout
+
+      while (!done && checkAttempts < maxAttempts) {
+        checkAttempts++;
+        await new Promise(r => setTimeout(r, 5000));
+        setGenProgress(Math.min(90, 5 + checkAttempts * 3));
+        setGenStep(`Compiling high-contrast clinical media frames (attempt ${checkAttempts})...`);
+
+        const statusRes = await fetch("/api/video-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ operationName })
+        });
+
+        if (!statusRes.ok) {
+          throw new Error("Polling error from Google Model Operation broker");
+        }
+
+        const statusData = await statusRes.json();
+        done = statusData.done;
+        
+        if (done) {
+          break;
+        }
+      }
+
+      if (!done) {
+        throw new Error("Veo 3 generation operation timed out.");
+      }
+
+      setGenProgress(95);
+      setGenStep("Model synthesis complete. Downloading & proxying video payload...");
+
+      const downloadRes = await fetch("/api/video-download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operationName })
+      });
+
+      if (!downloadRes.ok) {
+        throw new Error("Error retrieving video proxy bytes");
+      }
+
+      const blob = await downloadRes.blob();
+      const localUrl = URL.createObjectURL(blob);
+
+      setGenProgress(100);
+      setGenStep("Success!");
+
+      const newId = `vid-gen-${Date.now()}`;
+      const newVideo: VideoItem = {
+        id: newId,
+        title: `AI Generated: ${selectedTopic}`,
+        category: "maternal",
+        author: "Vytal Veo 3 Engine",
+        duration: "0:05",
+        embedId: "",
+        thumbnailUrl: imageBase64 || "/src/assets/images/successful_mother_1781975583165.jpg",
+        description: `Helper video focusing on ${selectedTopic} during ${selectedTrimester}. Prompt: "${promptToUse}"`,
+        localBlobUrl: localUrl,
+        takeaways: {
+          en: [
+            `Core: target ${selectedTopic} during ${selectedTrimester} systematically.`,
+            "Utilize continuous pelvic tilts and elevate swollen limbs above pelvic levels.",
+            "Schedule instant high-priority urinalyses if warning signs arise."
+          ],
+          sz: [
+            `Inhloso: ${selectedTopic} ngetindlela leticinisekisiwe ngesikhatsi ${selectedTrimester}.`,
+            "Phakamisa tinya letikhukhumalako etulu kune-pelvic levels.",
+            "Hlela kuhlola umchamo masinyane uma ubona letinye timandla letiyingoti."
+          ],
+          tn: [
+            `Thulaganyo: go fenya ${selectedTopic} ka ditsela tse di rurifaditsweng mo go ${selectedTrimester}.`,
+            "Tsholetsa maoto a a rurugileng kwa godimo ga maemo a sefega sa pelvic.",
+            "Lekola mosese ka pele fa o bona ditshupo dipe fela tsa tlhagiso."
+          ]
+        }
+      };
+
+      setVideoList(prev => [newVideo, ...prev]);
+      setSelectedVideo(newVideo);
+      setIsPlaying(false);
+      setIsGenerating(false);
+      setGenStep("");
+      setImageBase64(null);
+      setCustomPromptText("");
+    } catch (err: any) {
+      console.warn("Real Veo generation failed (falling back to helpful sandbox simulator):", err);
+      setGenStep("Launching fallback clinical viewport simulator...");
+      
+      let currentProgress = 10;
+      const interval = setInterval(() => {
+        currentProgress += 15;
+        if (currentProgress >= 100) {
           clearInterval(interval);
+          setGenProgress(100);
           
-          const newId = `vid-gen-${Date.now()}`;
+          const newId = `vid-gen-fallback-${Date.now()}`;
           const newVideo: VideoItem = {
             id: newId,
-            title: `AI Generated: ${selectedTopic} Course`,
+            title: `AI Generated (Simulated): ${selectedTopic}`,
             category: "maternal",
             author: "AI Studio Health Co-Pilot",
             duration: "3:40",
-            embedId: "Q4X-P6wre5M", // High quality maternal education preview placeholder
-            thumbnailUrl: "/src/assets/images/successful_mother_1781975583165.jpg",
+            embedId: "Q4X-P6wre5M",
+            thumbnailUrl: imageBase64 || "/src/assets/images/successful_mother_1781975583165.jpg",
             description: `A direct, AI-crafted tutorial covering ${selectedTopic} during ${selectedTrimester}, translating clinical protocols into clear community-health reminders.`,
             takeaways: {
               en: [
@@ -189,26 +351,13 @@ export default function EducationalVideoHub() {
           setSelectedVideo(newVideo);
           setIsGenerating(false);
           setGenStep("");
-          // Switch to category where it is created
-          setActiveCategory("maternal");
-          setIsPlaying(false);
-          return 100;
-        }
-
-        const next = prev + 15;
-        if (next < 30) {
-          setGenStep("Parsing clinical parameters of SADC region study boards...");
-        } else if (next < 65) {
-          setGenStep("Synthesizing multilingual audio scripts (EN, siSwati, Setswana)...");
-        } else if (next < 90) {
-          setGenStep("Assembling high-contrast pregnancy educational footage...");
         } else {
-          setGenStep("Refining clinical takeaways packages...");
+          setGenProgress(Math.min(99, currentProgress));
         }
-        return next > 100 ? 100 : next;
-      });
-    }, 600);
+      }, 500);
+    }
   };
+
 
   return (
     <div className="bg-white/40 border border-[#CFE6E3]/60 backdrop-blur-md rounded-3xl p-6 md:p-8 text-left shadow-lg space-y-6" id="educational-media-center">
@@ -273,13 +422,22 @@ export default function EducationalVideoHub() {
         <div className="lg:col-span-7 space-y-4">
           <div className="bg-[#2B1B2E] rounded-3xl overflow-hidden aspect-video relative shadow-xl border border-white/10">
             {isPlaying ? (
-              <iframe
-                title={selectedVideo.title}
-                src={`https://www.youtube.com/embed/${selectedVideo.embedId}?autoplay=1&rel=0&modestbranding=1`}
-                className="w-full h-full border-0 absolute inset-0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-              />
+              selectedVideo.localBlobUrl ? (
+                <video
+                  src={selectedVideo.localBlobUrl}
+                  controls
+                  autoPlay
+                  className="w-full h-full border-0 absolute inset-0"
+                />
+              ) : (
+                <iframe
+                  title={selectedVideo.title}
+                  src={`https://www.youtube.com/embed/${selectedVideo.embedId}?autoplay=1&rel=0&modestbranding=1`}
+                  className="w-full h-full border-0 absolute inset-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              )
             ) : (
               <div className="w-full h-full relative group">
                 <img
@@ -450,34 +608,125 @@ export default function EducationalVideoHub() {
 
             {showAiStudio && (
               <div className="space-y-3 pt-2.5 text-xs border-t border-[#BF7AF0]/10" id="ai-video-setup-fields">
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-pink-300 uppercase tracking-wider block">1. Select Target Topic</label>
-                  <select
-                    value={selectedTopic}
-                    onChange={(e) => setSelectedTopic(e.target.value)}
-                    className="w-full p-2 bg-[#261E30] border border-[#BF7AF0]/20 rounded-xl text-white text-[10.5px] focus:outline-none focus:border-[#BF7AF0]/50 cursor-pointer"
-                    id="select-ai-video-topic"
-                  >
-                    <option value="Ankle & Feet Swelling Mitigation">Ankle-Swelling Mitigation</option>
-                    <option value="Severe Hypertension Detection">Eclampsia & High BP Safety</option>
-                    <option value="Active Labor Breathing Loops">Contraction Breathing Controls</option>
-                    <option value="Folic Acid Supplements Dosage">Folate & Iron Tablet Intake</option>
-                    <option value="Gestational Diabetes Nutritional Guidance">Biochemical Glucose Checks</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-pink-300 uppercase tracking-wider block">1. Select Topic</label>
+                    <select
+                      value={selectedTopic}
+                      onChange={(e) => setSelectedTopic(e.target.value)}
+                      className="w-full p-2 bg-[#261E30] border border-[#BF7AF0]/20 rounded-xl text-white text-[10px] focus:outline-none focus:border-[#BF7AF0]/50 cursor-pointer"
+                      id="select-ai-video-topic"
+                    >
+                      <option value="Ankle & Feet Swelling Mitigation">Ankle Swelling</option>
+                      <option value="Severe Hypertension Detection">Hypertension Care</option>
+                      <option value="Active Labor Breathing Loops">Breathing Loops</option>
+                      <option value="Folic Acid Supplements Dosage">Folate & Iron</option>
+                      <option value="Gestational Diabetes Nutritional Guidance">Diabetes Nutrition</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-pink-300 uppercase tracking-wider block">2. Gestation stage</label>
+                    <select
+                      value={selectedTrimester}
+                      onChange={(e) => setSelectedTrimester(e.target.value)}
+                      className="w-full p-2 bg-[#261E30] border border-[#BF7AF0]/20 rounded-xl text-white text-[10px] focus:outline-none focus:border-[#BF7AF0]/50 cursor-pointer"
+                      id="select-ai-video-trimester"
+                    >
+                      <option value="Trimester 1 (Weeks 1-12)">Trimester 1</option>
+                      <option value="Trimester 2 (Weeks 13-26)">Trimester 2</option>
+                      <option value="Trimester 3 (Weeks 27-40)">Trimester 3</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-pink-300 uppercase tracking-wider block">2. Select Gestation Stage</label>
-                  <select
-                    value={selectedTrimester}
-                    onChange={(e) => setSelectedTrimester(e.target.value)}
-                    className="w-full p-2 bg-[#261E30] border border-[#BF7AF0]/20 rounded-xl text-white text-[10.5px] focus:outline-none focus:border-[#BF7AF0]/50 cursor-pointer"
-                    id="select-ai-video-trimester"
+                  <span className="text-[9px] font-black text-pink-300 uppercase tracking-wider block">3. Animation Source (Optional)</span>
+                  <div
+                    onDragEnter={handleDrag}
+                    onDragOver={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDrop={handleDrop}
+                    onClick={() => document.getElementById("video-first-frame-input")?.click()}
+                    className={`border border-dashed rounded-xl p-3 text-center cursor-pointer transition-all ${
+                      dragActive 
+                        ? "border-[#E84FA0] bg-[#E84FA0]/10" 
+                        : imageBase64 
+                          ? "border-emerald-500/50 bg-[#14291E]" 
+                          : "border-[#BF7AF0]/30 hover:border-[#BF7AF0]/65 bg-[#261E30]"
+                    }`}
                   >
-                    <option value="Trimester 1 (Weeks 1-12)">Trimester 1 (Weeks 1-12)</option>
-                    <option value="Trimester 2 (Weeks 13-26)">Trimester 2 (Weeks 13-26)</option>
-                    <option value="Trimester 3 (Weeks 27-40)">Trimester 3 (Weeks 27-40)</option>
-                  </select>
+                    <input
+                      id="video-first-frame-input"
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                    {imageBase64 ? (
+                      <div className="space-y-1 pointer-events-none">
+                        <img src={imageBase64} alt="Anchor Frame" className="w-16 h-10 object-cover mx-auto rounded border border-emerald-500/30" />
+                        <span className="text-[8px] font-black uppercase text-emerald-400 block">✓ Starting Image Loaded</span>
+                      </div>
+                    ) : (
+                      <div className="py-1">
+                        <span className="text-[12px]">🖼️</span>
+                        <p className="text-[8.5px] font-black uppercase text-[#DCA4FF] mt-1">Animate Image to Video</p>
+                        <p className="text-[7.5px] text-pink-200/50 font-semibold">Drag-and-drop or click to upload first frame anchor</p>
+                      </div>
+                    )}
+                  </div>
+                  {imageBase64 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setImageBase64(null);
+                      }}
+                      className="text-[8px] font-black uppercase text-red-300 hover:underline block cursor-pointer mt-1"
+                    >
+                      [ Clear Source Image ]
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-pink-300 uppercase tracking-wider block">4. Aspect Ratio & Framing</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setVideoAspectRatio("16:9")}
+                      className={`py-1 rounded-lg text-[9px] font-black uppercase transition-all cursor-pointer ${
+                        videoAspectRatio === "16:9" 
+                          ? "bg-pink-600 text-white border border-[#FF6FB1]" 
+                          : "bg-[#261E30] text-pink-300 border border-[#BF7AF0]/20"
+                      }`}
+                    >
+                      Landscape (16:9)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setVideoAspectRatio("9:16")}
+                      className={`py-1 rounded-lg text-[9px] font-black uppercase transition-all cursor-pointer ${
+                        videoAspectRatio === "9:16" 
+                          ? "bg-pink-600 text-white border border-[#FF6FB1]" 
+                          : "bg-[#261E30] text-pink-300 border border-[#BF7AF0]/20"
+                      }`}
+                    >
+                      Portrait (9:16)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-pink-300 uppercase tracking-wider block">5. Tailored Visual Prompt (Optional)</label>
+                  <textarea
+                    value={customPromptText}
+                    onChange={(e) => setCustomPromptText(e.target.value)}
+                    placeholder="e.g., A professional midwife demonstrating feet elevation, detailed clinic warm light..."
+                    rows={2}
+                    className="w-full p-2 bg-[#261E30] border border-[#BF7AF0]/20 rounded-xl text-white text-[10px] focus:outline-none focus:border-[#BF7AF0]/50 placeholder-pink-200/25 resize-none"
+                  />
                 </div>
 
                 {isGenerating ? (
@@ -500,7 +749,7 @@ export default function EducationalVideoHub() {
                     className="w-full py-2 bg-gradient-to-r from-[#FF6FB1] to-[#E84FA0] hover:shadow-md text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all hover:scale-[1.01] active:scale-99 cursor-pointer flex items-center justify-center gap-1"
                     id="compile-ai-video-action"
                   >
-                    <Sparkles className="w-3 h-3 text-white" /> Compile AI Training Video
+                    <Sparkles className="w-3 h-3 text-white" /> Compile Real Veo 3 Video
                   </button>
                 )}
               </div>

@@ -4,6 +4,7 @@ import PatientPortal from "./components/PatientPortal";
 import ClinicianPortal from "./components/ClinicianPortal";
 import EducationalVideoHub from "./components/EducationalVideoHub";
 import PatientLoginSignup from "./components/PatientLoginSignup";
+import AiDiagnosticsLab from "./components/AiDiagnosticsLab";
 import { Clinician, Patient, PatientReport, VitalsLog, MaternalMeeting, PostpartumCheckup, HospitalVisit } from "./types";
 import { isFirebaseConfigured, db, handleFirestoreError, OperationType } from "./lib/firebase";
 import { collection, onSnapshot, setDoc, doc, getDocs } from "firebase/firestore";
@@ -133,8 +134,8 @@ const awarenessConditions = [
 ];
 
 export default function App() {
-  // Navigation Routing Mode: "landing" | "patient" | "clinician"
-  const [activeSurface, setActiveSurface] = useState<"landing" | "patient" | "clinician">("landing");
+  // Navigation Routing Mode: "landing" | "patient" | "clinician" | "ai-lab"
+  const [activeSurface, setActiveSurface] = useState<"landing" | "patient" | "clinician" | "ai-lab">("landing");
   
   // Track regional awareness interactive sub-selection
   const [activeAwarenessId, setActiveAwarenessId] = useState<string>("pre-eclampsia");
@@ -254,11 +255,13 @@ export default function App() {
           ...prev,
           {
             id: `v-ussd-${Date.now()}`,
+            patientId: "demo-patient",
+            pulse: 125,
+            recordedBy: "patient",
             createdAt: new Date().toISOString(),
             systolic: 170,
             diastolic: 115,
             temperature: 39.2,
-            heartRate: 125,
             weight: 68,
             notes: `🚨 CRITICAL USSD EMERGENCY SOS Broadcast: [${selectedLabel}] triggered offline via SADC *120*375#`
           }
@@ -1126,6 +1129,14 @@ export default function App() {
           >
             <Stethoscope className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Doctor Hub</span>
+          </button>
+
+          <button
+            onClick={() => setActiveSurface("ai-lab")}
+            className={`flex items-center gap-1.5 bg-transparent py-2 px-3 rounded-lg text-xs font-black transition-all cursor-pointer ${activeSurface === "ai-lab" ? "vytal-btn-gradient text-white shadow-md scale-102" : "text-[#7A6B72] hover:text-[#2B1B2E]"}`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-pink-500 animate-pulse" />
+            <span className="hidden sm:inline">AI Diagnostics & Voice Lab</span>
           </button>
         </div>
 
@@ -2148,6 +2159,15 @@ export default function App() {
               </motion.div>
             )}
 
+          </div>
+        )}
+
+        {/* ====================================================
+            SURFACE D: AI DIAGNOSTICS & VOICE LAB WORKSPACE
+            ==================================================== */}
+        {activeSurface === "ai-lab" && (
+          <div className="bg-[#FAF8F6] p-6 md:p-10 rounded-3xl border border-[#CFE6E3]/60 shadow-xl min-h-screen relative overflow-hidden">
+            <AiDiagnosticsLab />
           </div>
         )}
 

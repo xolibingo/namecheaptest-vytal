@@ -9,7 +9,7 @@ export interface Clinic {
   location: string;
   country: "South Africa" | "Botswana" | "Eswatini";
   tier: "pilot" | "basic" | "pro" | "enterprise";
-  createdAt: Date;
+  createdAt: any;
 }
 
 export interface Patient {
@@ -21,12 +21,12 @@ export interface Patient {
   gestationalWeeks: number;
   edd: string; // Estimated due date
   medicalHistory: string[];
-  riskLevel: "normal" | "medium" | "high" | "critical";
+  riskLevel: "normal" | "medium" | "high" | "critical" | "low";
   riskDrivingSignal: string;
-  consentGranted: boolean;
+  consentGranted?: boolean;
   consentVersion: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: any;
+  updatedAt?: any;
 }
 
 export interface VitalsLog {
@@ -37,10 +37,10 @@ export interface VitalsLog {
   pulse: number; // bpm
   temperature: number; // Celsius
   weight: number; // kg
-  symptoms: string[];
-  recordedBy: "nurse" | "CHW" | "patient";
-  riskAlerts: string[];
-  createdAt: Date;
+  symptoms?: string[];
+  recordedBy: "nurse" | "CHW" | "patient" | "Self" | "Mbabane Nurse" | string;
+  riskAlerts?: string[];
+  createdAt: any;
   kickCount?: number;
   notes?: string;
 }

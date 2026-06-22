@@ -1,15 +1,20 @@
 import express, { Request, Response } from "express";
 import path from "path";
+import http from "http";
+import { WebSocketServer } from "ws";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, GenerateVideosOperation, Modality } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
 
 const app = express();
-app.use(express.json());
+// Support larger payloads for uploading patient photographs for AI diagnostics
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 const PORT = 3000;
+
 
 // Lazy-initialize Gemini Client
 let aiClient: GoogleGenAI | null = null;
@@ -364,11 +369,278 @@ Keep responses friendly, warm, cultural, and direct. Keep spacing clean, utilizi
   });
 });
 
+// 4. Veo 3 Video Generator - Start Operation
+app.post("/api/generate-video", async (req: Request, res: Response): Promise<void> => {
+  const { prompt, aspectRatio, base64Image, mimeType } = req.body;
+  const client = getGeminiClient();
+  if (!client) {
+    res.status(500).json({ error: "Gemini API client not configured on server" });
+    return;
+  }
+
+  try {
+    const config: any = {
+      numberOfVideos: 1,
+      resolution: "720p",
+      aspectRatio: aspectRatio || "16:9",
+    };
+
+    const payload: any = {
+      model: "veo-3.1-fast-generate-preview",
+      prompt: prompt || "A peaceful clinic in sub-saharan Africa under a beautiful clear sunrise, high dynamic range",
+      config: config
+    };
+
+    if (base64Image) {
+      const cleanBase64 = base64Image.replace(/^data:image\/\w+;base64,/, "");
+      payload.image = {
+        imageBytes: cleanBase64,
+        mimeType: mimeType || "image/png"
+      };
+    }
+
+    console.log("Calling ai.models.generateVideos with prompt:", payload.prompt);
+    const operation = await client.models.generateVideos(payload);
+    console.log("Generated video operation name:", operation.name);
+
+    res.json({ operationName: operation.name });
+  } catch (err: any) {
+    console.error("Error starting video generation:", err);
+    res.status(500).json({ error: err.message || "Failed to start video generation" });
+  }
+});
+
+// 5. Veo 3 Video Status - Poll Operation
+app.post("/api/video-status", async (req: Request, res: Response): Promise<void> => {
+  const { operationName } = req.body;
+  const client = getGeminiClient();
+  if (!client) {
+    res.status(500).json({ error: "Gemini API client not configured" });
+    return;
+  }
+
+  try {
+    const op = new GenerateVideosOperation();
+    op.name = operationName;
+    const updated = await client.operations.getVideosOperation({ operation: op });
+    res.json({ done: updated.done, progress: updated.metadata?.progressPercent || 0 });
+  } catch (err: any) {
+    console.error("Error polling video operation status:", err);
+    res.status(500).json({ error: err.message || "Error polling video status" });
+  }
+});
+
+// 6. Veo 3 Video Download - Stream Completed Video
+app.post("/api/video-download", async (req: Request, res: Response): Promise<void> => {
+  const { operationName } = req.body;
+  const client = getGeminiClient();
+  if (!client) {
+    res.status(500).json({ error: "Gemini API client not configured" });
+    return;
+  }
+
+  try {
+    const op = new GenerateVideosOperation();
+    op.name = operationName;
+    const updated = await client.operations.getVideosOperation({ operation: op });
+    
+    if (!updated.done) {
+      res.status(400).json({ error: "Video operation is not finished yet" });
+      return;
+    }
+
+    const uri = updated.response?.generatedVideos?.[0]?.video?.uri;
+    if (!uri) {
+      res.status(404).json({ error: "Generated video URI list was empty" });
+      return;
+    }
+
+    console.log("Fetching video from download URI:", uri);
+    const videoRes = await fetch(uri, {
+      headers: { "x-goog-api-key": process.env.GEMINI_API_KEY! },
+    });
+
+    if (!videoRes.ok) {
+      res.status(videoRes.status).json({ error: `Failed to download video from Google: ${videoRes.statusText}` });
+      return;
+    }
+
+    res.setHeader("Content-Type", "video/mp4");
+    
+    const reader = videoRes.body?.getReader();
+    if (reader) {
+      let active = true;
+      while (active) {
+        const { done, value } = await reader.read();
+        if (done) {
+          active = false;
+          res.end();
+        } else if (value) {
+          res.write(Buffer.from(value));
+        }
+      }
+    } else {
+      res.status(500).json({ error: "Could not read stream bytes" });
+    }
+  } catch (err: any) {
+    console.error("Error proxying video download:", err);
+    res.status(500).json({ error: err.message || "Failed to download generated video" });
+  }
+});
+
+// 7. Clinical Investigator & Deep Thinker Endpoint
+app.post("/api/investigate", async (req: Request, res: Response): Promise<void> => {
+  const { prompt, base64Image, mimeType, enableThinking, enableGrounding } = req.body;
+  const client = getGeminiClient();
+  if (!client) {
+    res.status(500).json({ error: "Gemini API client not configured" });
+    return;
+  }
+
+  try {
+    let model = "gemini-3.5-flash";
+    const config: any = {};
+
+    if (enableThinking) {
+      model = "gemini-3.1-pro-preview";
+      config.thinkingConfig = {
+        thinkingLevel: "HIGH"
+      };
+    } else if (base64Image) {
+      model = "gemini-3.1-pro-preview";
+    } else if (enableGrounding) {
+      model = "gemini-3.5-flash";
+      config.tools = [{ googleSearch: {} }];
+    }
+
+    const contents: any[] = [];
+    
+    if (base64Image) {
+      const cleanBase64 = base64Image.replace(/^data:image\/\w+;base64,/, "");
+      contents.push({
+        inlineData: {
+          data: cleanBase64,
+          mimeType: mimeType || "image/png"
+        }
+      });
+    }
+
+    contents.push(prompt || "Provide clinical prenatal guidance based on standard low-resource protocol.");
+
+    console.log(`Running diagnostics with model ${model}, thinking=${enableThinking}, grounding=${enableGrounding}`);
+    
+    const response = await client.models.generateContent({
+      model: model,
+      contents: contents,
+      config: {
+        ...config,
+        systemInstruction: `You are the Vytal Bridge Clinical Specialist & AI Diagnostic Investigator.
+Always format your response beautifully with markdown headings and clear bullet points.
+Under standard clinician liability frameworks, provide highly thorough, precise clinical guidance, translation, or insights.
+Do not issue direct prescriptions independently. Always reference when standard clinic attention (ANC checks) are necessary.`
+      }
+    });
+
+    res.json({
+      text: response.text || "No insights generated.",
+      modelUsed: model,
+      completedAt: new Date().toISOString()
+    });
+  } catch (err: any) {
+    console.error("Clinical investigation error:", err);
+    res.status(500).json({ error: err.message || "Failed to complete investigation" });
+  }
+});
+
 // ----------------------------------------------------
 // VITE OR STATIC FILE INTEGRATION
 // ----------------------------------------------------
 
+
 async function startServer() {
+  const server = http.createServer(app);
+  const wss = new WebSocketServer({ noServer: true });
+
+  wss.on("connection", async (clientWs) => {
+    console.log("Live API client connected");
+    const client = getGeminiClient();
+    if (!client) {
+      clientWs.send(JSON.stringify({ error: "Gemini API key not configured or initialized" }));
+      clientWs.close();
+      return;
+    }
+
+    try {
+      const session = await client.live.connect({
+        model: "gemini-3.1-flash-live-preview",
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
+          },
+          systemInstruction: `You are Sister Th Thandeka's virtual voice companion at the Vytal Bridge maternal clinic.
+Role: You are an extremely kind, empathetic prenatal care specialist helping rural Southern African mothers.
+Scope: Counsel them warmly on nutrition, fetal counts, and routine clinical ANC schedules. You are not a doctor and cannot diagnose. Keep replies strictly under 2 short sentences, utilizing comforting conversational English. If they report severe headaches or swelling, urgently tell them to visit their local nurse.`,
+        },
+        callbacks: {
+          onmessage: (message: any) => {
+            const audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+            if (audio) {
+              clientWs.send(JSON.stringify({ audio }));
+            }
+            if (message.serverContent?.interrupted) {
+              clientWs.send(JSON.stringify({ interrupted: true }));
+            }
+          },
+          onclose: () => {
+            console.log("Gemini Live session closed");
+            clientWs.close();
+          },
+          onerror: (err: any) => {
+            console.error("Gemini Live session error:", err);
+            clientWs.send(JSON.stringify({ error: "Live session error occurred" }));
+          }
+        },
+      });
+
+      clientWs.on("message", (data) => {
+        try {
+          const msg = JSON.parse(data.toString());
+          if (msg.audio) {
+            session.sendRealtimeInput({
+              audio: { data: msg.audio, mimeType: "audio/pcm;rate=16000" },
+            });
+          }
+        } catch (err) {
+          console.error("Error parsing message from client WS:", err);
+        }
+      });
+
+      clientWs.on("close", () => {
+        console.log("Client WS closed, closing Gemini session");
+        try {
+          session.close();
+        } catch (e) {}
+      });
+
+    } catch (err: any) {
+      console.error("Error connecting to Gemini Live:", err);
+      clientWs.send(JSON.stringify({ error: "Failed to establish Live session Code: " + err.message }));
+      clientWs.close();
+    }
+  });
+
+  server.on("upgrade", (request, socket, head) => {
+    const pathname = new URL(request.url || "", `http://${request.headers.host}`).pathname;
+    if (pathname === "/live" || pathname === "/live/") {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit("connection", ws, request);
+      });
+    } else {
+      socket.destroy();
+    }
+  });
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -384,9 +656,10 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  server.listen(PORT, "0.0.0.0", () => {
     console.log(`Vytal Bridge Server running on http://localhost:${PORT}`);
   });
 }
 
 startServer();
+
