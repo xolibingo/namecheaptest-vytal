@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Play, Sparkles, CheckCircle2, Video, Languages, ClipboardCheck, ArrowRight, Laptop } from "lucide-react";
 
@@ -129,6 +129,445 @@ const EDUCATIONAL_VIDEOS: VideoItem[] = [
     }
   }
 ];
+
+interface NativeVideoProps {
+  video: VideoItem;
+  isPlaying: boolean;
+  setIsPlaying: (playing: boolean) => void;
+}
+
+export function NativeClinicalVideoSimulator({ video, isPlaying, setIsPlaying }: NativeVideoProps) {
+  const [playProgress, setPlayProgress] = useState(0); // 0 to 100
+  const [currentTime, setCurrentTime] = useState(0); // in seconds
+  const [isMuted, setIsMuted] = useState(false);
+  const [isPlayingLocal, setIsPlayingLocal] = useState(true);
+  const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
+
+  // Total duration in seconds (parse duration string e.g. "4:12" => 252)
+  const durationSec = React.useMemo(() => {
+    const parts = video.duration.split(":");
+    if (parts.length === 2) {
+      return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+    }
+    return 60; // default 1 min
+  }, [video.duration]);
+
+  // Auto increment progress
+  useEffect(() => {
+    if (!isPlayingLocal) return;
+    const interval = setInterval(() => {
+      setCurrentTime((prev) => {
+        if (prev >= durationSec) {
+          setPlayProgress(100);
+          return durationSec;
+        }
+        const next = prev + 1;
+        setPlayProgress((next / durationSec) * 100);
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isPlayingLocal, durationSec]);
+
+  // Format seconds to M:SS
+  const formatTime = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return `${m}:${s < 10 ? "0" : ""}${s}`;
+  };
+
+  // Canvas drawing loop
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let animationId: number;
+    let frame = 0;
+
+    const render = () => {
+      if (!canvas || !ctx) return;
+      frame++;
+
+      // Set dimensions with scale to support high-DPI displays
+      const width = canvas.width;
+      const height = canvas.height;
+
+      // Draw background
+      ctx.fillStyle = "#160D1A";
+      ctx.fillRect(0, 0, width, height);
+
+      // Draw elegant grid lines
+      ctx.strokeStyle = "rgba(232, 79, 160, 0.05)";
+      ctx.lineWidth = 1;
+      const gridSpacing = 30;
+      for (let x = 0; x < width; x += gridSpacing) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+      }
+      for (let y = 0; y < height; y += gridSpacing) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+      }
+
+      // Draw clinical scan overlay framing
+      ctx.strokeStyle = "rgba(79, 112, 102, 0.3)";
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(15, 15, width - 30, height - 30);
+
+      // Scan target brackets at 4 corners
+      const bracketLen = 15;
+      ctx.strokeStyle = "#E84FA0";
+      ctx.lineWidth = 2.5;
+      // Top-Left
+      ctx.beginPath(); ctx.moveTo(20, 20 + bracketLen); ctx.lineTo(20, 20); ctx.lineTo(20 + bracketLen, 20); ctx.stroke();
+      // Top-Right
+      ctx.beginPath(); ctx.moveTo(width - 20, 20 + bracketLen); ctx.lineTo(width - 20, 20); ctx.lineTo(width - 20 - bracketLen, 20); ctx.stroke();
+      // Bottom-Left
+      ctx.beginPath(); ctx.moveTo(20, height - 20 - bracketLen); ctx.lineTo(20, height - 20); ctx.lineTo(20 + bracketLen, height - 20); ctx.stroke();
+      // Bottom-Right
+      ctx.beginPath(); ctx.moveTo(width - 20, height - 20 - bracketLen); ctx.lineTo(width - 20, height - 20); ctx.lineTo(width - 20 - bracketLen, height - 20); ctx.stroke();
+
+      // Top bar details
+      ctx.fillStyle = "rgba(79, 112, 102, 0.2)";
+      ctx.fillRect(25, 25, width - 50, 30);
+      ctx.fillStyle = "#A6F3E5";
+      ctx.font = "bold 9px monospace";
+      ctx.fillText(`VYTAL TELEHEALTH TRANSMISSION // REC MODE: LIVE`, 35, 43);
+      ctx.fillStyle = "#E84FA0";
+      ctx.fillText(`TRIMESTER ANALYTICS HUB`, width - 180, 43);
+
+      // Playback state indicator
+      if (isPlayingLocal && Math.floor(frame / 30) % 2 === 0) {
+        ctx.fillStyle = "#E84FA0";
+        ctx.beginPath();
+        ctx.arc(45, 80, 4, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "8px sans-serif";
+        ctx.fillText("NATIVE TRANSMISSION", 55, 83);
+      } else if (!isPlayingLocal) {
+        ctx.fillStyle = "#7A6B72";
+        ctx.font = "bold 8px sans-serif";
+        ctx.fillText("PAUSED", 45, 83);
+      }
+
+      // RENDER DETAILED ANIMATED LESSON CONTENT BASED ON SELECTED VIDEO ID
+      if (video.id === "vid-1") {
+        // Essential Prenatal Care & Maternal Health Timeline
+        const centerX = width / 2;
+        const centerY = height / 2 + 10;
+
+        // Draw horizontal timeline line
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(80, centerY + 30);
+        ctx.lineTo(width - 80, centerY + 30);
+        ctx.stroke();
+
+        const trimesters = [
+          { name: "TRI 1 (W1-12)", x: 120, info: "Folate & Screenings" },
+          { name: "TRI 2 (W13-26)", x: centerX, info: "2D Scan Checkpoint" },
+          { name: "TRI 3 (W27-40)", x: width - 120, info: "Risk Monitoring" }
+        ];
+
+        // Highlight active trimester based on play progress
+        let activeIdx = 0;
+        if (playProgress > 33) activeIdx = 1;
+        if (playProgress > 66) activeIdx = 2;
+
+        trimesters.forEach((t, idx) => {
+          const isActive = idx === activeIdx;
+          ctx.beginPath();
+          ctx.arc(t.x, centerY + 30, isActive ? 8 : 5, 0, 2 * Math.PI);
+          ctx.fillStyle = isActive ? "#E84FA0" : "#4F7066";
+          ctx.fill();
+          if (isActive) {
+            ctx.strokeStyle = "#FFFFFF";
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          }
+
+          ctx.fillStyle = isActive ? "#FFFFFF" : "#7A6B72";
+          ctx.font = isActive ? "bold 9.5px sans-serif" : "bold 8px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText(t.name, t.x, centerY + 48);
+
+          ctx.fillStyle = isActive ? "#A6F3E5" : "rgba(255, 255, 255, 0.3)";
+          ctx.font = "7px monospace";
+          ctx.fillText(t.info, t.x, centerY + 58);
+        });
+
+        // Draw an elegant developing womb silhouette at the center
+        ctx.strokeStyle = "rgba(232, 79, 160, 0.25)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY - 35, 45, 0, 2 * Math.PI);
+        ctx.stroke();
+
+        // Pulsing fetal heartbeat graph inside the womb sphere
+        ctx.strokeStyle = "#E84FA0";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        const startX = centerX - 30;
+        for (let i = 0; i < 60; i++) {
+          const x = startX + i;
+          let y = centerY - 35;
+          const phase = (frame * 0.12) % (2 * Math.PI);
+          if (i > 20 && i < 40) {
+            y += Math.sin((i - 20) * 0.4 + phase) * 12;
+          }
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "8px sans-serif";
+        ctx.fillText(`Fetal Heart Rate: ${140 + Math.floor(Math.sin(frame * 0.05) * 4)} BPM (Healthy)`, centerX, centerY - 15);
+
+      } else if (video.id === "vid-2") {
+        // Recognizing Gestational Risks & Pre-Eclampsia Signals
+        const centerX = width / 2;
+        const centerY = height / 2 + 5;
+
+        ctx.fillStyle = isPlayingLocal && Math.floor(frame / 20) % 2 === 0 ? "#EF4444" : "rgba(239, 68, 68, 0.4)";
+        ctx.font = "bold 20px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("⚠️", centerX - 120, centerY - 30);
+
+        ctx.fillStyle = isPlayingLocal && Math.floor(frame / 20) % 2 === 0 ? "#FF5F5F" : "#FFFFFF";
+        ctx.font = "bold 11px sans-serif";
+        ctx.fillText("CRITICAL DANGER METRIC TRACKING", centerX, centerY - 45);
+
+        const mockSystolic = 155 + Math.floor(Math.sin(frame * 0.04) * 8);
+        const mockDiastolic = 100 + Math.floor(Math.cos(frame * 0.04) * 5);
+        
+        ctx.fillStyle = "#1F1522";
+        ctx.fillRect(centerX - 90, centerY - 30, 180, 50);
+        ctx.strokeStyle = "#EF4444";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(centerX - 90, centerY - 30, 180, 50);
+
+        ctx.fillStyle = "#EF4444";
+        ctx.font = "bold 16px monospace";
+        ctx.fillText(`${mockSystolic} / ${mockDiastolic}`, centerX, centerY - 5);
+        ctx.fillStyle = "#A39099";
+        ctx.font = "bold 8px sans-serif";
+        ctx.fillText("SYS / DIA BP (HIGH PRE-ECLAMPSIA RISK)", centerX, centerY + 12);
+
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "9px sans-serif";
+        ctx.fillText("Key Alert Triggers: Persistent Headaches, Sudden Facial Edema", centerX, centerY + 38);
+        ctx.fillStyle = "#FFB2B2";
+        ctx.font = "8px monospace";
+        ctx.fillText(">> ESCALATE IMMEDIATELY TO REGIONAL OBSTETRICIAN", centerX, centerY + 50);
+
+      } else if (video.id === "vid-3") {
+        // Ask Vytal Platform Walkthrough: Hands-Free AI Voice Triage
+        const centerX = width / 2;
+        const centerY = height / 2 + 10;
+
+        const pulseScale = 1 + Math.abs(Math.sin(frame * 0.08)) * 0.25;
+        ctx.fillStyle = "rgba(232, 79, 160, 0.15)";
+        ctx.beginPath();
+        ctx.arc(centerX, centerY - 30, 25 * pulseScale, 0, 2 * Math.PI);
+        ctx.fill();
+
+        ctx.fillStyle = "#E84FA0";
+        ctx.beginPath();
+        ctx.arc(centerX, centerY - 30, 15, 0, 2 * Math.PI);
+        ctx.fill();
+
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(centerX - 3, centerY - 38, 6, 14);
+        ctx.strokeStyle = "#FFFFFF";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY - 31, 7, 0, Math.PI, false);
+        ctx.stroke();
+
+        ctx.strokeStyle = "#4F7066";
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        const waveX = centerX - 120;
+        for (let i = 0; i < 240; i += 8) {
+          const x = waveX + i;
+          const offset = Math.sin(i * 0.05 + frame * 0.15) * Math.sin(i * 0.01) * 15;
+          ctx.moveTo(x, centerY + 15 - offset);
+          ctx.lineTo(x, centerY + 15 + offset);
+        }
+        ctx.stroke();
+
+        ctx.fillStyle = "#A6F3E5";
+        ctx.font = "bold 8.5px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText(`TRANSCRIBING ENGLISH & SISWATI ...`, centerX, centerY + 40);
+
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "italic 9px sans-serif";
+        ctx.fillText(`"Sengivuvukele kakhulu tinya, futsi inhloko ibuhlungu..."`, centerX, centerY + 52);
+
+      } else if (video.id === "vid-4") {
+        // Maternal-Clinician Sync: Rural Telehealth Coordination
+        const centerX = width / 2;
+        const centerY = height / 2 + 10;
+
+        ctx.fillStyle = "rgba(79, 112, 102, 0.15)";
+        ctx.fillRect(centerX - 160, centerY - 50, 320, 100);
+        ctx.strokeStyle = "rgba(79, 112, 102, 0.4)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(centerX - 160, centerY - 50, 320, 100);
+
+        const ruralX = centerX - 100;
+        const ruralY = centerY;
+        const centralX = centerX + 100;
+        const centralY = centerY;
+
+        ctx.fillStyle = "#E84FA0";
+        ctx.beginPath(); ctx.arc(ruralX, ruralY, 6, 0, 2 * Math.PI); ctx.fill();
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "bold 8px sans-serif";
+        ctx.fillText("Rural Clinic", ruralX, ruralY - 10);
+
+        ctx.fillStyle = "#4F7066";
+        ctx.beginPath(); ctx.arc(centralX, centralY, 6, 0, 2 * Math.PI); ctx.fill();
+        ctx.fillText("Sister Thandeka's Center", centralX, centralY - 10);
+
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(ruralX, ruralY);
+        ctx.lineTo(centralX, centralY);
+        ctx.stroke();
+
+        const packetProgress = (frame * 0.01) % 1.0;
+        const packetX = ruralX + (centralX - ruralX) * packetProgress;
+        const packetY = ruralY + (centralY - ruralY) * packetProgress;
+
+        ctx.fillStyle = "#A6F3E5";
+        ctx.beginPath();
+        ctx.arc(packetX, packetY, 5, 0, 2 * Math.PI);
+        ctx.fill();
+
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "bold 7px monospace";
+        ctx.fillText("DATA-PACKET", packetX, packetY + 12);
+
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "bold 8px sans-serif";
+        ctx.fillText(`Mbabane Telehealth Synchronization Loop Active`, centerX, centerY + 38);
+        ctx.fillStyle = "#A6F3E5";
+        ctx.font = "7.5px monospace";
+        ctx.fillText(`9.6kbps Offline GPRS/SMS Compression Enabled`, centerX, centerY + 48);
+
+      } else {
+        const centerX = width / 2;
+        const centerY = height / 2 + 10;
+
+        ctx.strokeStyle = "rgba(232, 79, 160, 0.4)";
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(centerX - 80, centerY - 45, 160, 80);
+
+        ctx.fillStyle = "rgba(79, 112, 102, 0.1)";
+        ctx.fillRect(centerX - 80, centerY - 45, 160, 80);
+
+        const scanLineY = centerY - 45 + ((frame * 1.5) % 80);
+        ctx.strokeStyle = "#A6F3E5";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(centerX - 80, scanLineY);
+        ctx.lineTo(centerX + 80, scanLineY);
+        ctx.stroke();
+
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "bold 9px sans-serif";
+        ctx.fillText(video.title.toUpperCase(), centerX, centerY + 45);
+      }
+
+      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+      ctx.fillRect(15, height - 35, width - 30, 20);
+
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "9px monospace";
+      ctx.textAlign = "left";
+      ctx.fillText(`${formatTime(currentTime)} / ${video.duration}`, 25, height - 22);
+
+      ctx.textAlign = "right";
+      ctx.fillText(isMuted ? "🔇 MUTED" : "🔊 AUDIO SIMULATED", width - 25, height - 22);
+
+      animationId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      cancelAnimationFrame(animationId);
+    };
+  }, [video, isPlayingLocal, currentTime, isMuted, playProgress]);
+
+  return (
+    <div className="w-full h-full border-0 absolute inset-0 flex flex-col justify-between bg-black" id="native-clinical-video-simulator-canvas-frame">
+      <div className="flex-1 w-full h-full relative">
+        <canvas
+          ref={canvasRef}
+          width={640}
+          height={360}
+          className="w-full h-full object-cover"
+        />
+        <div className="absolute top-4 right-4 flex gap-2">
+          <button
+            type="button"
+            onClick={() => setIsMuted(!isMuted)}
+            className="p-1.5 rounded-lg bg-black/75 hover:bg-black text-white text-[9px] font-bold uppercase transition-all flex items-center gap-1 cursor-pointer"
+          >
+            {isMuted ? "Unmute" : "Mute"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsPlaying(false);
+            }}
+            className="p-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-[9px] font-bold uppercase transition-all flex items-center gap-1 cursor-pointer"
+          >
+            Close Video
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-[#1C1221] border-t border-[#CFE6E3]/20 px-4 py-3 flex items-center justify-between gap-4 select-none">
+        <button
+          type="button"
+          onClick={() => setIsPlayingLocal(!isPlayingLocal)}
+          className="px-3 py-1.5 rounded-xl bg-[#E84FA0] hover:bg-[#FF6FB1] text-white text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shadow-3xs"
+        >
+          {isPlayingLocal ? "⏸ Pause" : "▶ Play"}
+        </button>
+
+        <div className="flex-1 flex items-center gap-2">
+          <span className="text-[9px] text-[#A39099] font-mono">{formatTime(currentTime)}</span>
+          <div className="flex-1 bg-neutral-800 rounded-full h-1.5 relative overflow-hidden cursor-pointer">
+            <div
+              className="bg-gradient-to-r from-pink-500 to-[#E84FA0] h-1.5 rounded-full transition-all duration-300"
+              style={{ width: `${playProgress}%` }}
+            />
+          </div>
+          <span className="text-[9px] text-[#A39099] font-mono">{video.duration}</span>
+        </div>
+
+        <div className="text-[8.5px] font-mono text-emerald-400 font-extrabold uppercase bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded">
+          NATIVE PLAYER ACTIVE
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function EducationalVideoHub() {
   const [videoList, setVideoList] = useState<VideoItem[]>(EDUCATIONAL_VIDEOS);
@@ -439,12 +878,10 @@ export default function EducationalVideoHub() {
                   className="w-full h-full border-0 absolute inset-0"
                 />
               ) : (
-                <iframe
-                  title={selectedVideo.title}
-                  src={`https://www.youtube.com/embed/${selectedVideo.embedId}?autoplay=1&rel=0&modestbranding=1`}
-                  className="w-full h-full border-0 absolute inset-0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
+                <NativeClinicalVideoSimulator
+                  video={selectedVideo}
+                  isPlaying={isPlaying}
+                  setIsPlaying={setIsPlaying}
                 />
               )
             ) : (

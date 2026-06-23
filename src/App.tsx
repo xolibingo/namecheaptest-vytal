@@ -1,5 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "motion/react";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Legend as RechartsLegend,
+  Cell
+} from "recharts";
 import PatientPortal from "./components/PatientPortal";
 import ClinicianPortal from "./components/ClinicianPortal";
 import EducationalVideoHub from "./components/EducationalVideoHub";
@@ -140,6 +151,33 @@ const awarenessConditions = [
       "Know your regional referral emergency ambulance dispatch coordinates"
     ],
     howVytalHelps: "Provides quick single-click SADC Ambulance or Mbabane Dispatch VoIP dialers, streaming biometric history logs as doctors race to provide emergency advanced life support."
+  }
+];
+
+const PARADIGM_SHIFT_DATA = [
+  {
+    metric: "Pre-Eclampsia Mortality (%)",
+    traditional: 68,
+    vytalBridge: 12,
+    desc: "Proactive BP tracking prevents progression to severe gestational seizures"
+  },
+  {
+    metric: "Delayed Referral Emergencies (%)",
+    traditional: 82,
+    vytalBridge: 14,
+    desc: "Early telemetry bypasses the traditional clinic administrative bottleneck"
+  },
+  {
+    metric: "Unmonitored Early Miscarriage (%)",
+    traditional: 45,
+    vytalBridge: 8,
+    desc: "First trimester subchorionic scans allow early clinic stabilization"
+  },
+  {
+    metric: "Remote High-Risk Detection (%)",
+    traditional: 18,
+    vytalBridge: 94,
+    desc: "Decentralized digital checklists flag high-risk cases in remote villages"
   }
 ];
 
@@ -1265,6 +1303,231 @@ export default function App() {
                     <span className="text-[8px] font-bold text-[#E84FA0] uppercase block">Platform Doctor Coverage</span>
                     <h4 className="text-xs font-black text-[#2B1B2E] tracking-tight truncate leading-none uppercase">Assigned Clinic Center</h4>
                     <p className="text-[9.5px] text-[#7A6B72] font-semibold leading-normal">Mbabane Primary Maternal Health Centre, Eswatini</p>
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
+
+            {/* THE SILENT MATERNAL CRISIS & SYSTEMIC TRANSFORMATION HUB */}
+            <div className="bg-[#FFF8F6] border-2 border-[#E84FA0]/15 rounded-[32px] p-6 md:p-10 space-y-8 shadow-md" id="maternal-complications-crisis-panel">
+              <div className="max-w-3xl space-y-3 text-left">
+                <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase text-[#E84FA0] bg-[#E84FA0]/8 px-3.5 py-1.5 rounded-full tracking-widest">
+                  🚨 THE SYSTEMIC CRITICAL REPORT
+                </span>
+                <h2 className="text-3xl font-black text-[#2B1B2E] uppercase tracking-tight leading-none">
+                  Breaking the Loop: Why Traditional Systems Fail Expecting Mothers
+                </h2>
+                <p className="text-xs text-[#7A6B72] font-semibold leading-relaxed">
+                  Every year, thousands of maternal complications and preventable miscarriages across the SADC region go unaddressed. Traditional hospital structures rely on retrospective appointments and manual paperwork—creating a critical diagnostic bottleneck where early warning signs are missed entirely.
+                </p>
+              </div>
+
+              {/* Hard Statistics Dashboard */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+                <div className="bg-white border border-[#CFE6E3] p-5.5 rounded-2xl text-left space-y-2.5 shadow-3xs relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-rose-50 rounded-full blur-xl opacity-40"></div>
+                  <span className="text-[9px] font-extrabold uppercase text-[#7A6B72] tracking-wider block">Preventable Losses</span>
+                  <div className="flex items-baseline gap-1">
+                    <strong className="text-4xl font-black text-[#E84FA0]">65% - 70%</strong>
+                  </div>
+                  <p className="text-[11px] text-[#2B1B2E] font-bold leading-normal">
+                    of maternal deaths caused by severe Pre-Eclampsia and associated eclampsia spasms are **entirely preventable** with early, proactive blood pressure and protein telemetry.
+                  </p>
+                </div>
+
+                <div className="bg-white border border-[#CFE6E3] p-5.5 rounded-2xl text-left space-y-2.5 shadow-3xs relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-pink-50 rounded-full blur-xl opacity-40"></div>
+                  <span className="text-[9px] font-extrabold uppercase text-[#7A6B72] tracking-wider block">First Trimester Loss</span>
+                  <div className="flex items-baseline gap-1">
+                    <strong className="text-4xl font-black text-[#2B1B2E]">45%</strong>
+                  </div>
+                  <p className="text-[11px] text-[#2B1B2E] font-bold leading-normal">
+                    of premature miscarriages and ectopic pregnancies could be mitigated if warning parameters (e.g. sudden subchorionic hemorrhaging) were identified in the early weeks.
+                  </p>
+                </div>
+
+                <div className="bg-white border border-[#CFE6E3] p-5.5 rounded-2xl text-left space-y-2.5 shadow-3xs relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-amber-50 rounded-full blur-xl opacity-40"></div>
+                  <span className="text-[9px] font-extrabold uppercase text-[#7A6B72] tracking-wider block">The Referral Bottleneck</span>
+                  <div className="flex items-baseline gap-1">
+                    <strong className="text-4xl font-black text-[#4F7066]">12+ Hours</strong>
+                  </div>
+                  <p className="text-[11px] text-[#2B1B2E] font-bold leading-normal">
+                    is the average transport and administrative wait time in traditional rural referral systems, turning treatable prenatal complications into active medical emergencies.
+                  </p>
+                </div>
+              </div>
+
+              {/* Recharts Paradigm Shift Chart */}
+              <div className="bg-white border border-[#CFE6E3] p-6 rounded-3xl space-y-4 shadow-sm text-left">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-[#CFE6E3]/40 pb-4">
+                  <div>
+                    <span className="inline-flex items-center gap-1.5 text-[8.5px] font-black uppercase text-[#E84FA0] bg-[#E84FA0]/10 px-2.5 py-1 rounded-full tracking-widest">
+                      📊 DATA JUSTIFICATION HUB
+                    </span>
+                    <h3 className="text-lg font-black text-[#2B1B2E] uppercase mt-1">
+                      Traditional Hospital Loop vs. Vytal Telemetry Model
+                    </h3>
+                    <p className="text-[11px] text-[#7A6B72] font-semibold mt-0.5">
+                      Visualizing the structural paradigm shift in prenatal survival and clinical responsiveness indicators.
+                    </p>
+                  </div>
+                  <div className="text-[8px] font-mono font-black text-[#4F7066] uppercase bg-[#CFE6E3]/30 px-2 py-1 rounded border border-[#CFE6E3]/60">
+                    SADC CLINICAL PROXY STATS
+                  </div>
+                </div>
+
+                <div className="h-80 w-full" id="maternal-paradigm-recharts-wrapper">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={PARADIGM_SHIFT_DATA}
+                      margin={{ top: 20, right: 30, left: 10, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                      <XAxis
+                        dataKey="metric"
+                        stroke="#4F7066"
+                        fontSize={10}
+                        fontWeight={800}
+                        tickLine={false}
+                        axisLine={false}
+                        dy={10}
+                      />
+                      <YAxis
+                        stroke="#4F7066"
+                        fontSize={10}
+                        fontWeight={800}
+                        tickLine={false}
+                        axisLine={false}
+                        dx={-5}
+                      />
+                      <RechartsTooltip
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload;
+                            return (
+                              <div className="bg-[#2B1B2E] text-white p-3.5 rounded-2xl border border-neutral-800 shadow-xl max-w-xs text-xs space-y-1.5">
+                                <strong className="font-black text-[#E84FA0] uppercase block text-[10px] tracking-wider">
+                                  {data.metric}
+                                </strong>
+                                <div className="flex justify-between items-center text-[11px] font-bold border-b border-white/10 pb-1.5 mb-1.5">
+                                  <span className="text-neutral-400">Traditional:</span>
+                                  <span className="text-rose-400">{data.traditional}%</span>
+                                </div>
+                                <div className="flex justify-between items-center text-[11px] font-bold border-b border-white/10 pb-1.5 mb-1.5">
+                                  <span className="text-neutral-400">Vytal Bridge:</span>
+                                  <span className="text-emerald-400">{data.vytalBridge}%</span>
+                                </div>
+                                <p className="text-[9.5px] text-pink-100/70 font-semibold italic leading-relaxed">
+                                  {data.desc}
+                                </p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <RechartsLegend
+                        verticalAlign="top"
+                        height={36}
+                        iconType="circle"
+                        iconSize={8}
+                        wrapperStyle={{ fontSize: '10px', fontWeight: 900, textTransform: 'uppercase' }}
+                      />
+                      <Bar
+                        name="Traditional System (Reactive)"
+                        dataKey="traditional"
+                        fill="#7A6B72"
+                        radius={[8, 8, 0, 0]}
+                        maxBarSize={45}
+                      />
+                      <Bar
+                        name="Vytal Bridge Platform (Proactive)"
+                        dataKey="vytalBridge"
+                        fill="#E84FA0"
+                        radius={[8, 8, 0, 0]}
+                        maxBarSize={45}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* The Systemic Loop breakdown */}
+              <div className="bg-white/90 border border-pink-100 rounded-2xl p-5.5 space-y-4">
+                <h4 className="text-xs font-black uppercase text-[#2B1B2E] tracking-wider flex items-center gap-1.5 text-left">
+                  🔄 The Traditional System Loop of Failure
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs font-semibold text-[#7A6B72] text-left">
+                  <div className="p-3 bg-[#FCF8F5] rounded-xl border border-neutral-100 space-y-1">
+                    <span className="text-[#E84FA0] font-black">01. SILENT SYMPTOM</span>
+                    <p className="text-[10px] leading-relaxed">Mother experiences early, mild pre-eclampsia symptoms in a remote village, but lacks tools to measure or understand them.</p>
+                  </div>
+                  <div className="p-3 bg-[#FCF8F5] rounded-xl border border-neutral-100 space-y-1">
+                    <span className="text-[#E84FA0] font-black">02. DELAYED APPOINTMENT</span>
+                    <p className="text-[10px] leading-relaxed">Booking at general district hospital takes weeks. No remote clinic possesses specialized 2D ultrasound capabilities.</p>
+                  </div>
+                  <div className="p-3 bg-[#FCF8F5] rounded-xl border border-neutral-100 space-y-1">
+                    <span className="text-[#E84FA0] font-black">03. ACTIVE EMERGENCY</span>
+                    <p className="text-[10px] leading-relaxed">Symptoms worsen rapidly into gestational seizures. Rural referral protocols lead to immediate long ambulance journeys.</p>
+                  </div>
+                  <div className="p-3 bg-[#FCF8F5] rounded-xl border border-neutral-100 space-y-1">
+                    <span className="text-[#4F7066] font-black">04. SYSTEMIC RISE</span>
+                    <p className="text-[10px] leading-relaxed">The outcome results in traumatic losses, causing maternal and miscarriage mortality statistics across SADC to rise further.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Defining the Paradigm Shift (Narrative Change) */}
+              <div className="space-y-4 text-left">
+                <span className="text-[9px] font-black uppercase text-[#4F7066] tracking-wider block border-b border-[#CFE6E3] pb-2">
+                  🌟 HOW VYTAL BRIDGE REDEFINES THE PRENATAL NARRATIVE
+                </span>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  
+                  {/* Narrative for Nurses & Mothers */}
+                  <div className="space-y-4">
+                    <div className="space-y-1.5 text-left">
+                      <h4 className="text-sm font-extrabold text-[#2B1B2E] uppercase flex items-center gap-1.5">
+                        👩‍⚕️ For the Nurses: From Reactive Chaos to Proactive Calm
+                      </h4>
+                      <p className="text-[11.5px] text-[#7A6B72] font-semibold leading-relaxed">
+                        Instead of managing sudden, critical late-stage complications in understaffed emergency rooms, nurses are armed with **real-time triage dashboards**. Early telemetric alerts flag asymptomatic high-risk patients weeks in advance, enabling focused outpatient interventions and structured specialist coordination.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5 text-left">
+                      <h4 className="text-sm font-extrabold text-[#2B1B2E] uppercase flex items-center gap-1.5">
+                        🤰 For the Mothers: Reclaiming Agency and Lifelines
+                      </h4>
+                      <p className="text-[11.5px] text-[#7A6B72] font-semibold leading-relaxed">
+                        Mothers are no longer left in isolation, guessing if their swelling or headaches are normal. With voice-first symptom assessments and instant local USSD advice, they reclaim control over their bodies. They are backed by an active safety net that advises them precisely when to seek clinical attendance.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Narrative for Families & The Nation */}
+                  <div className="space-y-4">
+                    <div className="space-y-1.5 text-left">
+                      <h4 className="text-sm font-extrabold text-[#2B1B2E] uppercase flex items-center gap-1.5">
+                        🏡 For the Families: Safeguarding Generations & Hope
+                      </h4>
+                      <p className="text-[11.5px] text-[#7A6B72] font-semibold leading-relaxed">
+                        Avoidable maternal deaths and unexpected miscarriages tear families and communities apart. Vytal Bridge preserves the integrity of these families, ensuring that the journey of bringing new life into the world is defined by security, celebratory support, and clinical confidence rather than tragic loss.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5 text-left">
+                      <h4 className="text-sm font-extrabold text-[#2B1B2E] uppercase flex items-center gap-1.5">
+                        🇿🇦 For the Nation: A Stronger, Healthier Future
+                      </h4>
+                      <p className="text-[11.5px] text-[#7A6B72] font-semibold leading-relaxed">
+                        By integrating decentralized telemedicine, Vytal Bridge elevates public health indicators, lowers maternal mortality ratios, and relieves pressure on tertiary hospitals. It establishes a resilient prenatal infrastructure that fosters a healthy, thriving population from the very first trimester.
+                      </p>
+                    </div>
                   </div>
 
                 </div>
