@@ -8,9 +8,19 @@ import AiDiagnosticsLab from "./components/AiDiagnosticsLab";
 import { Clinician, Patient, PatientReport, VitalsLog, MaternalMeeting, PostpartumCheckup, HospitalVisit } from "./types";
 import { isFirebaseConfigured, db, handleFirestoreError, OperationType } from "./lib/firebase";
 import { collection, onSnapshot, setDoc, doc, getDocs } from "firebase/firestore";
+
+// Import local SADC maternal health images for guaranteed production Vite bundling and loading
+import imgMaternalBabyStages from "./assets/images/maternal_baby_stages_1781801156793.jpg";
+import imgPinkFlowerDream from "./assets/images/pink_flower_dream_1781801176611.jpg";
+import imgSuccessfulMother from "./assets/images/successful_mother_1781975583165.jpg";
+import imgPregnantAdvice from "./assets/images/pregnant_advice_1781975600218.jpg";
+import imgSadcMotherCounseling from "./assets/images/sadc_mother_counseling_1781976955140.jpg";
+import imgMaternalPeerCircle from "./assets/images/maternal_peer_circle_1781976969029.jpg";
+import imgGynecologyBackground from "./assets/images/gynecology_background_1781981188780.jpg";
 import { 
   Stethoscope, 
   Globe, 
+  Globe2,
   Heart, 
   Lock, 
   Smartphone, 
@@ -136,6 +146,9 @@ const awarenessConditions = [
 export default function App() {
   // Navigation Routing Mode: "landing" | "patient" | "clinician" | "ai-lab"
   const [activeSurface, setActiveSurface] = useState<"landing" | "patient" | "clinician" | "ai-lab">("landing");
+  
+  // Unified Global Language Selection for full system synchronization
+  const [globalLanguage, setGlobalLanguage] = useState<string>("English");
   
   // Track regional awareness interactive sub-selection
   const [activeAwarenessId, setActiveAwarenessId] = useState<string>("pre-eclampsia");
@@ -1140,13 +1153,36 @@ export default function App() {
           </button>
         </div>
 
-        {/* Callouts */}
-        <div className="hidden lg:flex items-center gap-2">
-          <div className="text-right text-[9.5px] font-semibold leading-none">
-            <span className="text-[#7A6B72]">Regional Coordinator:</span>
-            <span className="block font-black text-[#2B1B2E]">Sister Thandeka Kunene</span>
+        {/* Callouts & Global Language Toggle Sync */}
+        <div className="flex items-center gap-3">
+          {/* Universal Language Triage Select dropdown for full workspace sync */}
+          <div className="flex items-center gap-1.5 bg-[#FFF2F0] border border-[#FF6FB1]/20 px-2.5 py-1.5 rounded-xl text-neutral-800">
+            <Globe2 className="w-3.5 h-3.5 text-[#E84FA0] shrink-0" />
+            <select
+              value={globalLanguage}
+              onChange={(e) => setGlobalLanguage(e.target.value)}
+              className="bg-transparent text-[11px] font-extrabold outline-none cursor-pointer text-[#2B1B2E]"
+            >
+              <option value="English">🇬🇧 English</option>
+              <option value="siSwati">🇸🇿 siSwati</option>
+              <option value="Setswana">🇧🇼 Setswana</option>
+              <option value="isiZulu">🇿🇦 isiZulu</option>
+              <option value="isiXhosa">🇿🇦 isiXhosa</option>
+              <option value="Yoruba">🇳🇬 Yoruba</option>
+              <option value="Kiswahili">🇰🇪 Kiswahili</option>
+              <option value="Amharic">🇪🇹 Amharic</option>
+              <option value="Français">🇫🇷 Français</option>
+              <option value="Português">🇵🇹 Português</option>
+            </select>
           </div>
-          <span className="text-xl filter saturate-120">🩺</span>
+
+          <div className="hidden lg:flex items-center gap-2">
+            <div className="text-right text-[9.5px] font-semibold leading-none">
+              <span className="text-[#7A6B72]">Regional Coordinator:</span>
+              <span className="block font-black text-[#2B1B2E]">Sister Thandeka Kunene</span>
+            </div>
+            <span className="text-xl filter saturate-120">🩺</span>
+          </div>
         </div>
       </nav>
 
@@ -1217,7 +1253,7 @@ export default function App() {
 
                   <div className="rounded-2xl overflow-hidden bg-emerald-50 border border-white/60 shadow-xs h-96 relative z-10 flex items-center justify-center">
                     <img 
-                      src="/src/assets/images/maternal_baby_stages_1781801156793.jpg" 
+                      src={imgMaternalBabyStages} 
                       alt="Clinician Telehealth"
                       referrerPolicy="no-referrer"
                       className="w-full h-full object-cover scale-105"
@@ -1645,7 +1681,13 @@ export default function App() {
                   {(() => {
                     const activeAwarenessCond = awarenessConditions.find(c => c.id === activeAwarenessId) || awarenessConditions[0];
                     return (
-                      <>
+                      <motion.div
+                        key={activeAwarenessCond.id}
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.35, ease: "easeOut" }}
+                        className="space-y-4"
+                      >
                         {/* Active selected heading and statistics */}
                         <div className="space-y-1.5 relative z-10 border-b border-dashed border-neutral-100 pb-3">
                           <div className="flex items-center gap-2">
@@ -1742,7 +1784,7 @@ export default function App() {
                             </p>
                           </div>
                         </div>
-                      </>
+                      </motion.div>
                     );
                   })()}
 
@@ -1774,13 +1816,13 @@ export default function App() {
                     {/* Mother pregnancy picture block */}
                     <div className="h-60 rounded-2xl overflow-hidden bg-rose-50 border border-white/60 relative shadow-3xs">
                       <img 
-                        src="/src/assets/images/successful_mother_1781975583165.jpg" 
+                        src={imgSuccessfulMother} 
                         alt="Siphelele Mamba holding baby"
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-350"
                       />
                       <div className="absolute top-3 left-3 bg-[#2B1B2E]/90 text-white text-[8px] font-black tracking-wider uppercase px-2.5 py-1 rounded-full border border-white/20 flex items-center gap-1">
-                        <span>🇸🇿</span> PIGGS PEAK, ESWATINI • SUCCESS STORY
+                        <span>🇸🇿</span> PIGGS Peak, ESWATINI • SUCCESS STORY
                       </div>
                     </div>
 
@@ -1811,7 +1853,7 @@ export default function App() {
                     {/* Mother pregnancy picture block */}
                     <div className="h-60 rounded-2xl overflow-hidden bg-rose-50 border border-white/60 relative shadow-3xs">
                       <img 
-                        src="/src/assets/images/pregnant_advice_1781975600218.jpg" 
+                        src={imgPregnantAdvice} 
                         alt="Lerato Molefe looking at app screen"
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-350"
@@ -1848,7 +1890,7 @@ export default function App() {
                     {/* Mother pregnancy picture block */}
                     <div className="h-60 rounded-2xl overflow-hidden bg-rose-50 border border-white/60 relative shadow-3xs">
                       <img 
-                        src="/src/assets/images/sadc_mother_counseling_1781976955140.jpg" 
+                        src={imgSadcMotherCounseling} 
                         alt="Nonhle Khumalo looking at newborn"
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-350"
@@ -1885,7 +1927,7 @@ export default function App() {
                     {/* Mother pregnancy picture block */}
                     <div className="h-60 rounded-2xl overflow-hidden bg-rose-50 border border-white/60 relative shadow-3xs">
                       <img 
-                        src="/src/assets/images/maternal_peer_circle_1781976969029.jpg" 
+                        src={imgMaternalPeerCircle} 
                         alt="Tendai Moyo with supportive mothers support circle"
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-350"
@@ -1991,6 +2033,8 @@ export default function App() {
                     postpartumCheckups={postpartumCheckups}
                     onUpdatePostpartumCheckup={handleUpdatePostpartumCheckup}
                     hospitalVisits={hospitalVisits}
+                    appLanguage={globalLanguage}
+                    onLanguageChange={setGlobalLanguage}
                   />
                 ) : (
                   <PatientLoginSignup 
@@ -2019,7 +2063,7 @@ export default function App() {
           <div 
             className="space-y-6 p-6 md:p-10 rounded-3xl border border-[#CFE6E3]/60 shadow-xl min-h-screen relative overflow-hidden"
             style={{
-              backgroundImage: "linear-gradient(rgba(244, 248, 246, 0.91), rgba(244, 248, 246, 0.91)), url('/src/assets/images/gynecology_background_1781981188780.jpg')",
+              backgroundImage: `linear-gradient(rgba(244, 248, 246, 0.91), rgba(244, 248, 246, 0.91)), url('${imgGynecologyBackground}')`,
               backgroundSize: "cover",
               backgroundPosition: "center",
               backgroundRepeat: "no-repeat",
@@ -2047,6 +2091,8 @@ export default function App() {
                 onUpdatePostpartumCheckup={handleUpdatePostpartumCheckup}
                 hospitalVisits={hospitalVisits}
                 onAddHospitalVisit={handleAddHospitalVisit}
+                externalLanguage={globalLanguage}
+                onLanguageChange={setGlobalLanguage}
               />
             ) : (
               // Secure login bypass dialogue

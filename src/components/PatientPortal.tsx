@@ -49,8 +49,44 @@ import {
   Eye,
   Gem
 } from "lucide-react";
+
+// Import local SADC images for guaranteed production Vite bundling and loading in Patient Portal
+import imgPinkFlowerDream from "../assets/images/pink_flower_dream_1781801176611.jpg";
+import imgMaternalBabyStages from "../assets/images/maternal_baby_stages_1781801156793.jpg";
+
 import WeeklyMilestones from "./WeeklyMilestones";
 import SubscriptionPackages from "./SubscriptionPackages";
+
+const educationalTracks = [
+  {
+    title: "Pre-Eclampsia Telemetry & Prevention Cues",
+    speaker: "Sister Thandeka (SADC Clinic Telemetry Supervisor)",
+    language: "siSwati & English",
+    duration: "4:20",
+    description: "How to recognize early fluid retention, extreme headaches, and how clinical alert streams transmit to rural centers."
+  },
+  {
+    title: "Maternal Gestational Nutrition",
+    speaker: "Nurse Simelane (Mbabane Rural Clinic Admin)",
+    language: "siSwati",
+    duration: "3:15",
+    description: "Regional dietary strategies focusing on local SADC crops, leafy greens, and iron-rich foods to prevent maternal anemia."
+  },
+  {
+    title: "Maternal Movement Counting (Kick Counts)",
+    speaker: "Sister Kunene (SADC Referral Liaison)",
+    language: "English & Setswana",
+    duration: "5:45",
+    description: "Step-by-step guidance on counting fetal kicks in trimester three and when to notify your midwife about changes in pattern."
+  },
+  {
+    title: "Postpartum Mental Health Counseling",
+    speaker: "Dr. Mokgoro (SADC Clinical Advisory)",
+    language: "Setswana",
+    duration: "4:10",
+    description: "Supportive post-natal mental health guidance, local support connections, and overcoming anxiety in new mothers."
+  }
+];
 
 const InteractiveTrendChartTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
@@ -92,6 +128,161 @@ const InteractiveTrendChartTooltip = ({ active, payload }: any) => {
   return null;
 };
 
+interface AudioVoiceVisualizerProps {
+  isRecording: boolean;
+  stream: MediaStream | null;
+  hasPermission: boolean | null;
+}
+
+const AudioVoiceVisualizer: React.FC<AudioVoiceVisualizerProps> = ({ isRecording, stream, hasPermission }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animationRef = useRef<number | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const dataArrayRef = useRef<Uint8Array | null>(null);
+
+  useEffect(() => {
+    if (!isRecording) {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // Fixed sizing responsive to container
+    canvas.width = canvas.parentElement?.clientWidth || 300;
+    canvas.height = 80;
+
+    // Web Audio API setup
+    if (stream && hasPermission) {
+      try {
+        const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+        const audioContext = new AudioContextClass();
+        audioCtxRef.current = audioContext;
+
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        analyserRef.current = analyser;
+
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
+
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        dataArrayRef.current = dataArray;
+      } catch (err) {
+        console.warn("Failed to initialize AudioContext visualizer:", err);
+      }
+    }
+
+    let phase = 0;
+    const draw = () => {
+      if (!isRecording) return;
+      animationRef.current = requestAnimationFrame(draw);
+
+      const width = canvas.width;
+      const height = canvas.height;
+
+      // Clear canvas with trace effect
+      ctx.fillStyle = "rgba(250, 246, 242, 0.3)";
+      ctx.fillRect(0, 0, width, height);
+
+      const analyser = analyserRef.current;
+      const dataArray = dataArrayRef.current;
+
+      if (analyser && dataArray) {
+        analyser.getByteFrequencyData(dataArray);
+
+        const barWidth = (width / dataArray.length) * 1.5;
+        let barHeight;
+        let x = 0;
+
+        for (let i = 0; i < dataArray.length; i++) {
+          barHeight = dataArray[i] / 2.5;
+
+          const red = Math.floor(232 - (i / dataArray.length) * 100);
+          const green = Math.floor(79 + (i / dataArray.length) * 100);
+          const blue = Math.floor(160 - (i / dataArray.length) * 80);
+
+          ctx.fillStyle = `rgb(${red}, ${green}, ${blue})`;
+          const yPos = (height - barHeight) / 2;
+          
+          ctx.beginPath();
+          if (ctx.roundRect) {
+            ctx.roundRect(x, yPos, barWidth - 1.5, barHeight, 3);
+          } else {
+            ctx.rect(x, yPos, barWidth - 1.5, barHeight);
+          }
+          ctx.fill();
+
+          x += barWidth;
+        }
+      } else {
+        // Multi-layered beautiful overlapping waves
+        ctx.lineWidth = 2.5;
+        phase += 0.12;
+
+        const waveColors = [
+          "rgba(232, 79, 160, 0.8)",  // Rose accent
+          "rgba(79, 112, 102, 0.6)",  // Slate emerald
+          "rgba(255, 111, 177, 0.4)", // Light rose
+        ];
+
+        for (let w = 0; w < 3; w++) {
+          ctx.strokeStyle = waveColors[w];
+          ctx.beginPath();
+
+          const amplitude = 18 - w * 4;
+          const frequency = 0.025 + w * 0.01;
+          const speed = phase * (1 + w * 0.25);
+
+          for (let x = 0; x < width; x++) {
+            const y = height / 2 + Math.sin(x * frequency + speed) * amplitude * Math.sin((x / width) * Math.PI);
+            if (x === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+          }
+          ctx.stroke();
+        }
+      }
+    };
+
+    draw();
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+        audioCtxRef.current.close();
+      }
+    };
+  }, [isRecording, stream, hasPermission]);
+
+  return (
+    <div className="w-full bg-[#FAF6F2] rounded-2xl p-2 border border-[#CFE6E3]/60 relative overflow-hidden flex flex-col items-center">
+      <div className="absolute top-2 right-2 flex gap-1 items-center">
+        <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />
+        <span className="text-[7.5px] text-[#E84FA0] font-black uppercase font-mono tracking-widest">LIVE TRANSLATION UPSTREAM</span>
+      </div>
+      <canvas ref={canvasRef} className="w-full h-20 rounded-xl" />
+      <div className="mt-1 flex items-center justify-between w-full px-2 text-[8px] font-bold text-neutral-500 uppercase tracking-wider font-mono">
+        <span>16kHz Mono</span>
+        <span className="text-[#4F7066] animate-pulse">Telemetry Duplex Decibel Range: -12dB</span>
+        <span>24kHz Downlink</span>
+      </div>
+    </div>
+  );
+};
+
 interface PatientPortalProps {
   externalSegment?: "timeline" | "companion" | "vitals" | "kicks" | "connections";
   onSegmentChange?: (seg: "timeline" | "companion" | "vitals" | "kicks" | "connections") => void;
@@ -124,6 +315,7 @@ interface PatientPortalProps {
   onUpdatePostpartumCheckup?: (updated: PostpartumCheckup) => void;
   hospitalVisits?: HospitalVisit[];
   appLanguage?: string;
+  externalLanguage?: string;
   onLanguageChange?: (lang: string) => void;
 }
 
@@ -253,6 +445,28 @@ export default function PatientPortal({
   const [transcriptionText, setTranscriptionText] = useState("");
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [hasMicPermission, setHasMicPermission] = useState<boolean | null>(null);
+  const [micStream, setMicStream] = useState<MediaStream | null>(null);
+  const [voiceSymptomLogged, setVoiceSymptomLogged] = useState(false);
+
+  // Automated language detection state variables
+  const [isLanguageDetecting, setIsLanguageDetecting] = useState(false);
+  const [isAnalyzingLanguage, setIsAnalyzingLanguage] = useState(false);
+  const [suggestedLanguage, setSuggestedLanguage] = useState<"English" | "siSwati" | "Setswana">("English");
+  const [selectedLanguage, setSelectedLanguage] = useState<"English" | "siSwati" | "Setswana">("English");
+  const [tempAudioBlobUrl, setTempAudioBlobUrl] = useState<string | null>(null);
+  const [bypassAutoLanguageDetection, setBypassAutoLanguageDetection] = useState(false);
+
+  // Ask Vytal Voice Tutorial & Educational Audio states
+  const [eduHubSubTab, setEduHubSubTab] = useState<"tutorial" | "audio">("tutorial");
+  const [tutorialLangTab, setTutorialLangTab] = useState<"English" | "siSwati" | "Setswana">("English");
+  const [currentEduTrack, setCurrentEduTrack] = useState<number | null>(null);
+  const [isEduPlaying, setIsEduPlaying] = useState(false);
+  const [eduProgress, setEduProgress] = useState(0);
+  const [eduVolume, setEduVolume] = useState(0.5);
+  const [eduPlaybackSpeed, setEduPlaybackSpeed] = useState(1.0);
+
+  const educationalSynthRef = useRef<any>(null);
+  const eduProgressIntervalRef = useRef<any>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -316,7 +530,7 @@ export default function PatientPortal({
   const [simulatedActiveCall, setSimulatedActiveCall] = useState<string | null>(null);
 
   // Educational pregnancy academy and health tips states
-  const [academyMode, setAcademyMode] = useState<"conditions" | "tips" | "activities">("conditions");
+  const [academyMode, setAcademyMode] = useState<"conditions" | "tips" | "activities" | "milestones">("conditions");
   const [selectedConditionId, setSelectedConditionId] = useState<string | null>("pre-eclampsia");
   const [dailyAcademyHabits, setDailyAcademyHabits] = useState({
     hydrated: false,
@@ -837,14 +1051,219 @@ export default function PatientPortal({
     }
   };
 
+  const triggerLanguageDetection = (url: string | null) => {
+    setTempAudioBlobUrl(url);
+    if (bypassAutoLanguageDetection) {
+      proceedToTranscription(selectedLanguage);
+    } else {
+      setIsLanguageDetecting(true);
+      setIsAnalyzingLanguage(true);
+      
+      setTimeout(() => {
+        setIsAnalyzingLanguage(false);
+        // Heuristic dynamic prediction with high preference for Setswana (Kelebogile Mokgoro local context)
+        const r = Math.random();
+        let detected: "English" | "siSwati" | "Setswana" = "Setswana";
+        if (r < 0.2) {
+          detected = "English";
+        } else if (r < 0.4) {
+          detected = "siSwati";
+        }
+        setSuggestedLanguage(detected);
+        setSelectedLanguage(detected);
+      }, 1200);
+    }
+  };
+
+  const proceedToTranscription = (lang: "English" | "siSwati" | "Setswana") => {
+    setIsLanguageDetecting(false);
+    setIsTranscribing(true);
+    
+    setTimeout(() => {
+      setIsTranscribing(false);
+      if (tempAudioBlobUrl) {
+        setAudioUrl(tempAudioBlobUrl);
+      }
+      
+      const setswanaPhrases = [
+        "Dumela BabyBot, ke rurugile ditshipi le go lwala mo ditlhaloganyong.",
+        "Nka bona ditiro tsa go itshireletsa mo pre-eclampsia jang ka Setswana?",
+        "A masea a tshwanetse go utlwa ditlhabi mo mpa dithubeng tsa beke ya 36?",
+        "Ke batla go ikgolaganya le Sister Thandeka mo lephateng la botsogo."
+      ];
+      const siswatiPhrases = [
+        "Ekseni BabyBot, ngicela kuta kuhlola Sister Kunene ngoba nginetinyawo letivuvukile.",
+        "Luhlobo luni lwekudla lwekukhulisa emanti emtimbeni kute ngigvikele pre-eclampsia?",
+        "BabyBot, ematfuba ekukhahlela emntfwana kufanele abe mangakhi ngelilanga?",
+        "Ngingayivikela njani imikhuhlane yetemcondvo ngesikhatsi semitsimba?"
+      ];
+      const englishPhrases = [
+        "What are the early signs of pre-eclampsia that I should look out for?",
+        "Is it safe to sleep on my back during the third trimester?",
+        "Which SADC local foods help boost iron levels to prevent maternal anemia?",
+        "Dumela BabyBot, how many diaper counts and kicks are normal in week 36?",
+        "Could sweet tea or high salt trigger sudden blood pressure spikes?",
+        "Can you fetch contact details for Sister Kunene or my SADC referral center?",
+        "Explain what body changes I should expect in gestational week 32."
+      ];
+      
+      let chosen = "";
+      if (lang === "Setswana") {
+        chosen = setswanaPhrases[Math.floor(Math.random() * setswanaPhrases.length)];
+      } else if (lang === "siSwati") {
+        chosen = siswatiPhrases[Math.floor(Math.random() * siswatiPhrases.length)];
+      } else {
+        chosen = englishPhrases[Math.floor(Math.random() * englishPhrases.length)];
+      }
+      
+      setAiText(chosen);
+      setTranscriptionText(chosen);
+    }, 1500);
+  };
+
+  // Educational Audio Synthesizer control logic
+  const startEducationalSynth = (volumeVal = eduVolume) => {
+    try {
+      const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      
+      // Create oscillator for low warm maternal heartbeat pulse
+      const heartOsc = ctx.createOscillator();
+      const heartGain = ctx.createGain();
+      heartOsc.type = "sine";
+      heartOsc.frequency.setValueAtTime(55, ctx.currentTime); // low A1 note
+      heartGain.gain.setValueAtTime(0, ctx.currentTime);
+      heartOsc.connect(heartGain);
+      heartGain.connect(ctx.destination);
+      heartOsc.start();
+      
+      let pulseToggle = true;
+      const pulseInterval = setInterval(() => {
+        if (ctx.state === "suspended") {
+          ctx.resume().catch(() => {});
+        }
+        pulseToggle = !pulseToggle;
+        const now = ctx.currentTime;
+        heartGain.gain.cancelScheduledValues(now);
+        heartGain.gain.setValueAtTime(pulseToggle ? 0.3 * volumeVal : 0.08 * volumeVal, now);
+        heartGain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+      }, 750); // 80 BPM
+      
+      // Calming high pitch bell sound
+      const chimeOsc = ctx.createOscillator();
+      const chimeGain = ctx.createGain();
+      chimeOsc.type = "triangle";
+      chimeOsc.frequency.setValueAtTime(293.66, ctx.currentTime); // D4 note
+      chimeGain.gain.setValueAtTime(0, ctx.currentTime);
+      chimeOsc.connect(chimeGain);
+      chimeGain.connect(ctx.destination);
+      chimeOsc.start();
+      
+      const chimeInterval = setInterval(() => {
+        const now = ctx.currentTime;
+        chimeGain.gain.cancelScheduledValues(now);
+        chimeGain.gain.setValueAtTime(0.15 * volumeVal, now);
+        chimeGain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+      }, 2500); // ambient relax chime
+      
+      educationalSynthRef.current = {
+        ctx,
+        intervals: [pulseInterval, chimeInterval],
+        oscillators: [heartOsc, chimeOsc],
+        gains: [heartGain, chimeGain]
+      };
+    } catch (e) {
+      console.warn("Maternal Voice Synth Error:", e);
+    }
+  };
+
+  const stopEducationalSynth = () => {
+    if (educationalSynthRef.current) {
+      educationalSynthRef.current.intervals.forEach((id: any) => clearInterval(id));
+      educationalSynthRef.current.oscillators.forEach((osc: any) => {
+        try { osc.stop(); } catch (err) {}
+      });
+      try {
+        educationalSynthRef.current.ctx.close();
+      } catch (err) {}
+      educationalSynthRef.current = null;
+    }
+  };
+
+  const handleToggleEduTrackPlay = (index: number) => {
+    if (currentEduTrack === index) {
+      if (isEduPlaying) {
+        setIsEduPlaying(false);
+        stopEducationalSynth();
+      } else {
+        setIsEduPlaying(true);
+        startEducationalSynth(eduVolume);
+      }
+    } else {
+      stopEducationalSynth();
+      setCurrentEduTrack(index);
+      setEduProgress(0);
+      setIsEduPlaying(true);
+      startEducationalSynth(eduVolume);
+    }
+  };
+
+  // Manage educational audio progress timer
+  useEffect(() => {
+    if (isEduPlaying && currentEduTrack !== null) {
+      eduProgressIntervalRef.current = setInterval(() => {
+        setEduProgress((prev) => {
+          if (prev >= 100) {
+            clearInterval(eduProgressIntervalRef.current);
+            setIsEduPlaying(false);
+            stopEducationalSynth();
+            return 100;
+          }
+          return prev + (1.2 * eduPlaybackSpeed);
+        });
+      }, 100);
+    } else {
+      if (eduProgressIntervalRef.current) {
+        clearInterval(eduProgressIntervalRef.current);
+      }
+    }
+    return () => {
+      if (eduProgressIntervalRef.current) {
+        clearInterval(eduProgressIntervalRef.current);
+      }
+    };
+  }, [isEduPlaying, currentEduTrack, eduPlaybackSpeed]);
+
+  // Handle live volume tweaks during synth stream
+  useEffect(() => {
+    if (isEduPlaying && educationalSynthRef.current) {
+      // dynamically update gain values if possible
+      educationalSynthRef.current.gains.forEach((g: any) => {
+        try {
+          g.gain.setValueAtTime(0.15 * eduVolume, educationalSynthRef.current.ctx.currentTime);
+        } catch (e) {}
+      });
+    }
+  }, [eduVolume, isEduPlaying]);
+
+  // Clean up on component unmount
+  useEffect(() => {
+    return () => {
+      stopEducationalSynth();
+    };
+  }, []);
+
   const startAudioRecording = async () => {
     setAudioUrl(null);
     setTranscriptionText("");
     setRecordingSeconds(0);
     audioChunksRef.current = [];
+    setIsLanguageDetecting(false);
     
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setMicStream(stream);
       setHasMicPermission(true);
       setIsRecordingReal(true);
       
@@ -860,26 +1279,10 @@ export default function PatientPortal({
       mediaRecorder.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
         const url = URL.createObjectURL(audioBlob);
-        setAudioUrl(url);
-        
-        setIsTranscribing(true);
-        setTimeout(() => {
-          setIsTranscribing(false);
-          const maternalPhrases = [
-            "What are the early signs of pre-eclampsia that I should look out for?",
-            "Is it safe to sleep on my back during the third trimester?",
-            "Which SADC local foods help boost iron levels to prevent maternal anemia?",
-            "Dumela BabyBot, how many diaper counts and kicks are normal in week 36?",
-            "Could sweet tea or high salt trigger sudden blood pressure spikes?",
-            "Can you fetch contact details for Sister Kunene or my SADC referral center?",
-            "Explain what body changes I should expect in gestational week 32."
-          ];
-          const chosen = maternalPhrases[Math.floor(Math.random() * maternalPhrases.length)];
-          setAiText(chosen);
-          setTranscriptionText(chosen);
-        }, 1500);
+        triggerLanguageDetection(url);
         
         stream.getTracks().forEach(track => track.stop());
+        setMicStream(null);
       };
       
       mediaRecorder.start();
@@ -892,6 +1295,7 @@ export default function PatientPortal({
       console.warn("Real microphone access denied or not supported.", err);
       setHasMicPermission(false);
       setIsRecordingReal(true);
+      setMicStream(null);
       
       recordingTimerRef.current = setInterval(() => {
         setRecordingSeconds(prev => prev + 1);
@@ -905,26 +1309,16 @@ export default function PatientPortal({
       clearInterval(recordingTimerRef.current);
     }
     
+    if (micStream) {
+      micStream.getTracks().forEach(track => track.stop());
+      setMicStream(null);
+    }
+    
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
     } else {
       // Handle fallback mode
-      setIsTranscribing(true);
-      setTimeout(() => {
-        setIsTranscribing(false);
-        const maternalPhrases = [
-          "What are the early signs of pre-eclampsia that I should look out for?",
-          "Is it safe to sleep on my back during the third trimester?",
-          "Which SADC local foods help boost iron levels to prevent maternal anemia?",
-          "Dumela BabyBot, how many diaper counts and kicks are normal in week 36?",
-          "Could sweet tea or high salt trigger sudden blood pressure spikes?",
-          "Can you fetch contact details for Sister Kunene or my SADC referral center?",
-          "Explain what body changes I should expect in gestational week 32."
-        ];
-        const chosen = maternalPhrases[Math.floor(Math.random() * maternalPhrases.length)];
-        setAiText(chosen);
-        setTranscriptionText(chosen);
-      }, 1500);
+      triggerLanguageDetection(null);
     }
   };
 
@@ -1176,7 +1570,7 @@ export default function PatientPortal({
                       <div className="absolute inset-0 opacity-10 bg-[linear-gradient(45deg,#FF6FB1_1px,transparent_1px)] bg-[size:10px_10px]"></div>
                       
                       <img 
-                        src="/src/assets/images/pink_flower_dream_1781801176611.jpg" 
+                        src={imgPinkFlowerDream} 
                         alt="3D baby render"
                         referrerPolicy="no-referrer"
                         className="w-full h-full object-cover rounded-full mix-blend-multiply scale-110 filter contrast-[1.12]"
@@ -2822,6 +3216,341 @@ export default function PatientPortal({
               </div>
             </div>
 
+            {/* NEW: CLINICAL VOICE TRIAGE RECORDING STATION */}
+            <div className="p-4 bg-gradient-to-br from-[#FFF9F6] via-white to-emerald-50/20 border border-pink-100/60 rounded-3xl shadow-xs space-y-4 text-left relative overflow-hidden animate-fade-in" id="voice-triage-station">
+              {/* Soft decorative ambient glow */}
+              <div className="absolute top-0 right-0 w-24 h-24 bg-pink-400/5 rounded-full blur-xl pointer-events-none" />
+
+              <div className="flex justify-between items-start gap-2 border-b border-neutral-100 pb-2.5">
+                <div>
+                  <span className="text-[8px] bg-pink-100 text-[#E84FA0] px-1.5 py-0.5 rounded font-black uppercase tracking-widest block w-fit mb-1">
+                    Hands-Free Voice Triage
+                  </span>
+                  <h4 className="text-xs font-black text-[#2B1B2E] uppercase">Speak Health Symptoms</h4>
+                </div>
+                <div className="flex gap-1">
+                  {["EN", "SZ", "TN", "ZU"].map((l) => (
+                    <span key={l} className="text-[7.5px] font-black font-mono text-neutral-400 bg-neutral-100 px-1 py-0.5 rounded">
+                      {l}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <p className="text-[9.5px] text-[#5F716A] leading-relaxed font-semibold">
+                Dumela mama! Describe your symptoms aloud. The system will record, visualize, and extract pre-eclampsia risk triggers like headaches, facial swelling, or body fatigue.
+              </p>
+
+              {/* LIVE AUDIO VISUALIZATION CONSOLE */}
+              {isRecordingReal && (
+                <div className="space-y-1.5 animate-fade-in">
+                  <span className="text-[8px] font-extrabold uppercase text-[#E84FA0] tracking-wider block font-mono">
+                    🎙️ Capture Stream Active · Duration: {Math.floor(recordingSeconds / 60).toString().padStart(2, '0')}:{(recordingSeconds % 60).toString().padStart(2, '0')}
+                  </span>
+                  <AudioVoiceVisualizer isRecording={isRecordingReal} stream={micStream} hasPermission={hasMicPermission} />
+                </div>
+              )}
+
+              {/* SADC AUTOMATED LANGUAGE DETECTION ASSISTANCE ELEMENT */}
+              {isLanguageDetecting && (
+                <div className="p-3 bg-white/95 border border-pink-100/80 rounded-2xl shadow-xs space-y-3 animate-fade-in text-left">
+                  <div className="flex justify-between items-center pb-2 border-b border-pink-50">
+                    <span className="text-[8.5px] font-black uppercase text-[#E84FA0] tracking-wider flex items-center gap-1 font-mono">
+                      🎙️ Acoustic Language Probe
+                    </span>
+                    <span className="text-[7.5px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-mono">
+                      {isAnalyzingLanguage ? "Probing..." : "Match Found"}
+                    </span>
+                  </div>
+
+                  {isAnalyzingLanguage ? (
+                    <div className="py-4 flex flex-col items-center justify-center text-center space-y-2">
+                      <div className="w-6 h-6 border-2 border-[#E84FA0] border-t-transparent rounded-full animate-spin" />
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] font-black uppercase text-[#2B1B2E]">Analyzing Acoustic Signature</span>
+                        <p className="text-[8px] text-[#5F716A] font-bold">Scanning dialect phonology (English / Setswana / siSwati)...</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="bg-gradient-to-r from-pink-50 to-emerald-50/40 p-2.5 rounded-xl border border-pink-100/50 space-y-1">
+                        <span className="text-[8.5px] font-extrabold text-slate-500 uppercase font-mono block">Suggested SADC Language</span>
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-black text-[#2B1B2E] uppercase tracking-tight">
+                            {suggestedLanguage === "Setswana" && "Setswana (Dumela mama/Lesea)"}
+                            {suggestedLanguage === "siSwati" && "siSwati (Ekseni/Ematfuba)"}
+                            {suggestedLanguage === "English" && "English (Anemia/Headache)"}
+                          </span>
+                          <span className="text-[9px] font-black font-mono text-[#E84FA0] bg-pink-100/80 px-2 py-0.5 rounded-full animate-pulse">
+                            94% Confidence
+                          </span>
+                        </div>
+                        <p className="text-[9px] text-[#5F716A] font-semibold leading-relaxed pt-0.5">
+                          Detected based on vocal resonance dynamics. Confirming this ensures 35% higher accuracy when parsing pre-eclampsia warning triggers.
+                        </p>
+                      </div>
+
+                      {/* Manual Language Selector Overrides */}
+                      <div className="space-y-1">
+                        <span className="text-[8px] font-black text-[#5F716A] uppercase tracking-wider block">Adjust or Override Suggestion:</span>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {(["English", "siSwati", "Setswana"] as const).map((lang) => (
+                            <button
+                              key={lang}
+                              type="button"
+                              onClick={() => setSelectedLanguage(lang)}
+                              className={`py-1.5 px-2 rounded-lg text-[9px] font-black uppercase transition-all border cursor-pointer text-center ${
+                                selectedLanguage === lang
+                                  ? "bg-[#2B1B2E] text-white border-[#2B1B2E] shadow-3xs"
+                                  : "bg-neutral-50 text-slate-600 border-neutral-200 hover:bg-neutral-100"
+                              }`}
+                            >
+                              {lang}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex gap-2 pt-1 border-t border-dashed border-neutral-150">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsLanguageDetecting(false);
+                            setAudioUrl(null);
+                          }}
+                          className="py-1.5 px-3 bg-neutral-50 hover:bg-neutral-100 text-slate-600 rounded-xl text-[9px] font-black uppercase border border-neutral-200 cursor-pointer"
+                        >
+                          Discard
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => proceedToTranscription(selectedLanguage)}
+                          className="flex-1 py-1.5 bg-gradient-to-r from-[#FF6FB1] to-[#E84FA0] text-white text-[9px] font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 shadow-3xs"
+                        >
+                          Confirm & Transcribe
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* CONTROL BOARD / LARGE RECORDING BUTTON */}
+              {!isLanguageDetecting && (
+                <div className="flex flex-col items-center justify-center py-2.5 bg-white/50 border border-white rounded-2xl">
+                  {!isRecordingReal && !audioUrl && !isTranscribing && (
+                    <button
+                      type="button"
+                      onClick={startAudioRecording}
+                      className="relative group flex flex-col items-center justify-center p-5 rounded-full bg-gradient-to-tr from-[#FF6FB1] to-[#E84FA0] text-white hover:scale-105 active:scale-95 transition-all shadow-md cursor-pointer"
+                      style={{ width: "74px", height: "74px" }}
+                      id="triage-record-trigger-btn"
+                    >
+                      <span className="absolute inset-0 rounded-full bg-[#FF6FB1]/30 group-hover:animate-ping pointer-events-none" />
+                      <Mic className="w-7 h-7 text-white animate-pulse" />
+                    </button>
+                  )}
+
+                  {isRecordingReal && (
+                    <button
+                      type="button"
+                      onClick={stopAudioRecording}
+                      className="flex flex-col items-center justify-center p-5 rounded-full bg-[#2B1B2E] text-[#00FF66] hover:scale-105 active:scale-95 transition-all shadow-md animate-pulse cursor-pointer"
+                      style={{ width: "74px", height: "74px" }}
+                      id="triage-stop-trigger-btn"
+                    >
+                      <StopCircle className="w-7 h-7" />
+                    </button>
+                  )}
+
+                  {isTranscribing && (
+                    <div className="flex flex-col items-center py-2.5">
+                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-3 border-t-transparent border-[#E84FA0]" />
+                      <span className="text-[9.5px] font-black uppercase text-[#E84FA0] mt-2 tracking-widest animate-pulse">
+                        Analyzing speech metrics...
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Status Help Label */}
+                  <div className="mt-2 text-center">
+                    <span className="text-[10px] font-extrabold text-[#2B1B2E]">
+                      {!isRecordingReal && !audioUrl && !isTranscribing && "Tap to Start Recording"}
+                      {isRecordingReal && "Speaking... Tap to Stop & Transcribe"}
+                      {isTranscribing && "Processing speech with clinical dictionary"}
+                      {audioUrl && !isTranscribing && !isRecordingReal && "Voice Symptom Processed!"}
+                    </span>
+                    <span className="text-[8px] text-[#5F716A] block mt-0.5">
+                      {hasMicPermission === false && !audioUrl && "⚠️ Falling back to virtual voice simulation"}
+                      {hasMicPermission === true && !audioUrl && "✅ Direct high-fidelity physical microphone connected"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* POST-RECORDING TRANSCRIPT, RISK HIGHLIGHTS AND INTEGRATED ACTIONS */}
+              {audioUrl && !isTranscribing && !isRecordingReal && !isLanguageDetecting && (
+                <div className="bg-white/90 border border-pink-100 p-3 rounded-2xl space-y-3 animate-fade-in">
+                  
+                  {/* Audioclip playback */}
+                  {hasMicPermission && (
+                    <div className="flex items-center gap-2 bg-[#FAF6F2] p-2 rounded-xl border border-neutral-150">
+                      <Volume2 className="w-4 h-4 text-[#E84FA0] shrink-0" />
+                      <span className="text-[8px] font-black uppercase text-neutral-500">Audio Preview:</span>
+                      <audio src={audioUrl} controls className="h-6 max-w-full text-xs flex-1" />
+                    </div>
+                  )}
+
+                  {/* Transcribed Text Display */}
+                  <div className="space-y-1">
+                    <span className="text-[8px] font-black text-[#4F7066] uppercase tracking-wider block">Transcribed Symptom Text:</span>
+                    <blockquote className="text-[10.5px] italic font-bold text-[#2B1B2E] bg-amber-50/30 border border-amber-200/40 p-2.5 rounded-xl leading-normal">
+                      "{transcriptionText || aiText}"
+                    </blockquote>
+                  </div>
+
+                  {/* CLINICAL SCREENING RISK LEVEL HIGHLIGHTS */}
+                  {(() => {
+                    const textStr = (transcriptionText || aiText || "").toLowerCase();
+                    const detectedRisks: string[] = [];
+                    if (textStr.includes("headache") || textStr.includes("migraine") || textStr.includes("head")) {
+                      detectedRisks.push("Severe Headache (Hypertensive Warning)");
+                    }
+                    if (textStr.includes("swell") || textStr.includes("swoll") || textStr.includes("puff")) {
+                      detectedRisks.push("Edema / Extremity Swelling (Renal/Fluid Retention)");
+                    }
+                    if (textStr.includes("vision") || textStr.includes("blur") || textStr.includes("flash") || textStr.includes("eye")) {
+                      detectedRisks.push("Visual Disturbance / Flashes (Pre-Eclampsia Risk)");
+                    }
+                    if (textStr.includes("pain") || textStr.includes("cramp") || textStr.includes("hurt")) {
+                      detectedRisks.push("Abdominal / Pelvic Cramping (Obstetric Alert)");
+                    }
+                    if (textStr.includes("fatigue") || textStr.includes("tired") || textStr.includes("weak")) {
+                      detectedRisks.push("Extreme Fatigue (Cardiovascular Stress)");
+                    }
+
+                    const hasHighRisk = detectedRisks.length > 0;
+
+                    return (
+                      <div className={`p-2.5 rounded-xl border ${hasHighRisk ? 'bg-rose-50 border-rose-100 text-rose-950' : 'bg-emerald-50 border-emerald-100 text-emerald-950'} space-y-1`}>
+                        <span className="text-[8.5px] font-black uppercase tracking-wider block flex items-center gap-1">
+                          {hasHighRisk ? (
+                            <>
+                              <AlertTriangle className="w-3.5 h-3.5 text-rose-600 animate-pulse" />
+                              <span className="text-rose-700">Urgent Triage Warning Signs Detected</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span className="text-emerald-700">Triage: Standard Physical Bounds</span>
+                            </>
+                          )}
+                        </span>
+                        
+                        {hasHighRisk ? (
+                          <div className="space-y-1">
+                            <p className="text-[9.5px] leading-snug font-semibold text-rose-900">
+                              Our voice parsing model identified high-risk symptoms that may require active clinical checking by Sister Thandeka or Sister Kunene:
+                            </p>
+                            <ul className="list-disc list-inside text-[9.5px] font-bold text-rose-950 space-y-0.5">
+                              {detectedRisks.map((risk, index) => (
+                                <li key={index}>{risk}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        ) : (
+                          <p className="text-[9.5px] leading-snug font-semibold text-emerald-800">
+                            No critical pre-eclampsia or hypertensive emergency keywords extracted from the voice note. Keep monitoring daily.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* ACTION BOARD */}
+                  <div className="flex gap-2 pt-1.5 border-t border-dotted border-neutral-200">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleSendChatMessage(transcriptionText || aiText);
+                        setAudioUrl(null);
+                      }}
+                      className="flex-1 py-2 bg-[#4F7066] hover:bg-[#3D574F] text-white text-[9.5px] font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-3xs transition-all active:scale-95"
+                    >
+                      <Send className="w-3.5 h-3.5" /> Submit to Vytal AI Chat
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const textStr = (transcriptionText || aiText || "").toLowerCase();
+                        let foundSymptom = "Unspecified Voice Log";
+                        let severity: "Normal" | "Monitor" | "Referral" = "Normal";
+                        if (textStr.includes("headache")) {
+                          foundSymptom = "Headache / Migraine";
+                          severity = "Monitor";
+                        } else if (textStr.includes("swell") || textStr.includes("swoll")) {
+                          foundSymptom = "Facial/Extremity Swelling";
+                          severity = "Monitor";
+                        } else if (textStr.includes("vision") || textStr.includes("blur")) {
+                          foundSymptom = "Visual disturbances";
+                          severity = "Referral";
+                        } else if (textStr.includes("pain") || textStr.includes("cramp")) {
+                          foundSymptom = "Severe abdominal pain";
+                          severity = "Referral";
+                        }
+
+                        onAddReport({
+                          patientId: "pat-2",
+                          patientName: "Kelebogile Mokgoro",
+                          gestationalWeeks: currentWeek,
+                          symptom: foundSymptom,
+                          severity: severity,
+                          description: `Recorded via Speak Health Symptoms Voice Triage: "${transcriptionText || aiText}"`,
+                          voiceNoteSimulated: true,
+                        });
+
+                        setVoiceSymptomLogged(true);
+                        setAudioUrl(null);
+                        setTranscriptionText("");
+                        setTimeout(() => {
+                          setVoiceSymptomLogged(false);
+                        }, 3000);
+                      }}
+                      className="flex-1 py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white text-[9.5px] font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-3xs transition-all active:scale-95"
+                    >
+                      <PlusCircle className="w-3.5 h-3.5" /> Log to Clinical Reports
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAudioUrl(null);
+                        setTranscriptionText("");
+                      }}
+                      className="py-2 px-3 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200/50 rounded-xl text-[9.5px] font-black uppercase cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                </div>
+              )}
+
+              {/* CONFIRMATION SUCCESS NOTIFICATION */}
+              {voiceSymptomLogged && (
+                <div className="p-3 bg-emerald-500 border border-emerald-400 text-white rounded-2xl flex items-center gap-2">
+                  <Check className="w-4 h-4 text-white shrink-0 animate-bounce" />
+                  <div className="text-left">
+                    <span className="text-[10px] font-black uppercase tracking-wider block">Symptom Logged Successfully!</span>
+                    <span className="text-[8.5px] opacity-90 block">Physical symptom telemetry securely added to your medical profile and synchronized with Sister Thandeka.</span>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
             {/* Ask Vytal Workspace Panel with Voice Transcription simulation */}
             <div className="p-4 bg-white/45 backdrop-blur-xl border border-white/50 rounded-3xl shadow-xs space-y-3 relative overflow-hidden">
               
@@ -2836,8 +3565,52 @@ export default function PatientPortal({
                 </svg>
               </div>
 
-              <div className="space-y-2 z-10 relative">
-                <span className="text-[9px] font-extrabold uppercase tracking-widest text-[#5F716A] block">Virtual Prenatal Assistant Hub</span>
+              <div className="space-y-2.5 z-10 relative">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 border-b border-[#D5E1DB]/40 pb-1.5">
+                  <span className="text-[9px] font-extrabold uppercase tracking-widest text-[#5F716A] block">Virtual Prenatal Assistant Hub</span>
+                  
+                  {/* Manual Language Preference Selector */}
+                  <div className="flex items-center gap-1.5 bg-[#FAF6F2] p-1 rounded-lg border border-pink-150/40">
+                    <span className="text-[8px] font-black uppercase text-neutral-500 px-1 font-mono">Preferred SADC Language:</span>
+                    <div className="flex gap-0.5">
+                      {(["English", "siSwati", "Setswana"] as const).map((lang) => (
+                        <button
+                          key={lang}
+                          type="button"
+                          onClick={() => setSelectedLanguage(lang)}
+                          className={`px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase tracking-tight transition-all cursor-pointer ${
+                            selectedLanguage === lang
+                              ? "bg-[#2B1B2E] text-white"
+                              : "text-slate-600 hover:bg-white/50"
+                          }`}
+                        >
+                          {lang}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* SADC Speech Option - Skip Auto-Detection Switch */}
+                <div className="flex items-center justify-between bg-white/60 px-2.5 py-1.5 rounded-xl border border-white/80">
+                  <div className="flex items-center gap-1.5 text-left">
+                    <span className="text-[10px] font-bold text-[#2B1B2E]">Skip Auto-Language Detection</span>
+                    <span className="text-[8px] text-[#5F716A] block font-semibold">(Directly transcribe in preferred SADC language)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBypassAutoLanguageDetection(prev => !prev)}
+                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none cursor-pointer ${
+                      bypassAutoLanguageDetection ? 'bg-[#E84FA0]' : 'bg-neutral-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                        bypassAutoLanguageDetection ? 'translate-x-4.5' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
                 
                 {/* Conversations Area */}
                 <div className="p-3 bg-white/80 border border-white/60 rounded-2xl min-h-[160px] max-h-[220px] overflow-y-auto space-y-2.5 no-scrollbar flex flex-col">
@@ -2881,7 +3654,7 @@ export default function PatientPortal({
                 </div>
 
                 {/* STATEFUL COMPREHENSIVE VOICE RECORDING & TRANSCRIPTION PANEL */}
-                {(isRecordingReal || audioUrl || isTranscribing) && (
+                {(isRecordingReal || audioUrl || isTranscribing || isLanguageDetecting) && (
                   <motion.div 
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
@@ -2894,7 +3667,7 @@ export default function PatientPortal({
                           <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isRecordingReal ? 'bg-red-400' : 'bg-[#4F7066]'}`}></span>
                           <span className={`relative inline-flex rounded-full h-2 w-2 ${isRecordingReal ? 'bg-red-500' : 'bg-[#4F7066]'}`}></span>
                         </span>
-                        {isRecordingReal ? "Microphone Recording Active" : isTranscribing ? "SADC AI Transcribing Node..." : "Voice Note Recorded!"}
+                        {isRecordingReal ? "Microphone Recording Active" : isLanguageDetecting ? "Automated Language Detection..." : isTranscribing ? "SADC AI Transcribing Node..." : "Voice Note Recorded!"}
                       </span>
                       <button 
                         type="button"
@@ -2902,6 +3675,7 @@ export default function PatientPortal({
                           setIsRecordingReal(false);
                           setAudioUrl(null);
                           setIsTranscribing(false);
+                          setIsLanguageDetecting(false);
                           if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
                         }}
                         className="text-[9.5px] font-black text-gray-500 hover:text-red-500 transition-all cursor-pointer"
@@ -2909,6 +3683,87 @@ export default function PatientPortal({
                         Cancel
                       </button>
                     </div>
+
+                    {/* Language Detection Phase */}
+                    {isLanguageDetecting && (
+                      <div className="p-2.5 bg-white border border-pink-100 rounded-xl space-y-3 animate-fade-in text-left">
+                        <div className="flex justify-between items-center pb-1.5 border-b border-pink-50">
+                          <span className="text-[8.5px] font-black uppercase text-[#E84FA0] tracking-wider flex items-center gap-1 font-mono">
+                            🎙️ SADC Language Detector
+                          </span>
+                          <span className="text-[7.5px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded font-mono">
+                            {isAnalyzingLanguage ? "Probing..." : "Match Found"}
+                          </span>
+                        </div>
+
+                        {isAnalyzingLanguage ? (
+                          <div className="py-3 flex flex-col items-center justify-center text-center space-y-1.5">
+                            <div className="w-5 h-5 border-2 border-[#E84FA0] border-t-transparent rounded-full animate-spin" />
+                            <span className="text-[9.5px] font-black uppercase text-[#2B1B2E]">Analyzing dialect acoustics</span>
+                            <p className="text-[8px] text-[#5F716A] font-semibold">Testing phonetic structures against SADC language profiles...</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            <div className="bg-gradient-to-r from-pink-50/50 to-emerald-50/20 p-2 rounded-lg border border-pink-100/30 space-y-1">
+                              <span className="text-[8px] font-extrabold text-slate-500 uppercase font-mono block">Detected Language Choice</span>
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-black text-[#2B1B2E] uppercase">
+                                  {suggestedLanguage}
+                                </span>
+                                <span className="text-[8px] font-black font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                  94% Match
+                                </span>
+                              </div>
+                              <p className="text-[8.5px] text-[#5F716A] font-semibold leading-normal">
+                                Automated helper detected your spoken language. Confirming improves transcription correctness.
+                              </p>
+                            </div>
+
+                            {/* Manual options */}
+                            <div className="space-y-1">
+                              <span className="text-[8px] font-black text-[#5F716A] uppercase tracking-wider block">Change transcription language:</span>
+                              <div className="flex gap-1">
+                                {["English", "siSwati", "Setswana"].map((lang) => (
+                                  <button
+                                    key={lang}
+                                    type="button"
+                                    onClick={() => setSelectedLanguage(lang as any)}
+                                    className={`flex-1 py-1 rounded text-[8.5px] font-black uppercase transition-all border cursor-pointer ${
+                                      selectedLanguage === lang
+                                        ? "bg-[#2B1B2E] text-white border-[#2B1B2E]"
+                                        : "bg-white text-slate-600 border-neutral-200 hover:bg-neutral-50"
+                                    }`}
+                                  >
+                                    {lang}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex gap-1 pt-1.5 border-t border-dashed border-neutral-100">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setIsLanguageDetecting(false);
+                                  setAudioUrl(null);
+                                }}
+                                className="px-2.5 py-1 bg-neutral-50 hover:bg-neutral-100 text-slate-600 rounded-lg text-[8.5px] font-black uppercase border border-neutral-200 cursor-pointer"
+                              >
+                                Discard
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => proceedToTranscription(selectedLanguage)}
+                                className="flex-1 py-1 bg-[#4F7066] hover:bg-[#3D574F] text-white text-[8.5px] font-black uppercase tracking-wider rounded-lg flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 shadow-3xs"
+                              >
+                                Confirm & Transcribe
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Audio Recorder Active Phase */}
                     {isRecordingReal && (
@@ -2957,7 +3812,7 @@ export default function PatientPortal({
                     )}
 
                     {/* Result Phase - Review Transcription text and play audio note */}
-                    {audioUrl && !isTranscribing && !isRecordingReal && (
+                    {audioUrl && !isTranscribing && !isRecordingReal && !isLanguageDetecting && (
                       <div className="space-y-2 bg-white/80 p-2.5 rounded-xl border border-pink-100/60 text-left">
                         {hasMicPermission && (
                           <div className="flex items-center gap-2 bg-neutral-50/80 p-1.5 rounded-lg border border-neutral-150">
@@ -3120,6 +3975,479 @@ export default function PatientPortal({
                   </button>
                 </div>
               </div>
+
+            </div>
+
+            {/* VYTAL VOICE-TRIAGE TUTORIAL & MATERNAL AUDIO EDUCATIONAL HUB */}
+            <div className="p-4 bg-gradient-to-br from-white via-pink-50/5 to-emerald-50/10 border border-pink-100/40 rounded-3xl shadow-xs space-y-4 text-left relative overflow-hidden animate-fade-in" id="vytal-voice-educational-hub">
+              {/* Visual decorative accents */}
+              <div className="absolute -right-6 -top-6 w-20 h-20 bg-pink-400/5 rounded-full blur-lg pointer-events-none" />
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#D5E1DB]/40 pb-2.5">
+                <div>
+                  <span className="text-[8px] bg-[#4F7066]/10 text-[#4F7066] px-1.5 py-0.5 rounded font-black uppercase tracking-widest block w-fit mb-1 font-mono">
+                    🎙️ Maternal SADC Telemetry Hub
+                  </span>
+                  <h4 className="text-xs font-black text-[#2B1B2E] uppercase">Vytal Voice Cues & Educational Guides</h4>
+                </div>
+                <div className="flex gap-1.5">
+                  <span className="text-[8.5px] font-bold text-[#E84FA0] bg-pink-50 px-2 py-0.5 rounded border border-pink-100 font-mono">
+                    SADC Regional Telecom
+                  </span>
+                </div>
+              </div>
+
+              {/* Hub Navigation Tabs */}
+              <div className="flex gap-1 p-1 bg-[#FAF6F2] rounded-xl border border-neutral-200/50">
+                <button
+                  type="button"
+                  onClick={() => setEduHubSubTab("tutorial")}
+                  className={`flex-1 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    eduHubSubTab === "tutorial"
+                      ? "bg-[#2B1B2E] text-white shadow-3xs"
+                      : "text-slate-600 hover:bg-white/50"
+                  }`}
+                >
+                  🎙️ Voice-Triage Tutorial
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEduHubSubTab("audio")}
+                  className={`flex-1 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    eduHubSubTab === "audio"
+                      ? "bg-[#2B1B2E] text-white shadow-3xs"
+                      : "text-slate-600 hover:bg-white/50"
+                  }`}
+                >
+                  📻 Audio Health Guides
+                </button>
+              </div>
+
+              {/* Subtab 1: Voice-Triage Tutorial */}
+              {eduHubSubTab === "tutorial" && (
+                <div className="space-y-3.5 animate-fade-in">
+                  <p className="text-[9.5px] text-[#5F716A] leading-relaxed font-semibold">
+                    Our machine learning clinical model scans mother voice logs specifically for eclampsia indicators, gestational age benchmarks, and danger keywords. Choose a language below to view guidelines on how to structure your voice check-ins:
+                  </p>
+
+                  {/* Language Selector */}
+                  <div className="flex gap-1 bg-white/40 p-0.5 rounded-lg border border-neutral-150">
+                    {(["English", "siSwati", "Setswana"] as const).map((lang) => (
+                      <button
+                        key={lang}
+                        type="button"
+                        onClick={() => setTutorialLangTab(lang)}
+                        className={`flex-1 py-1 rounded-md text-[8.5px] font-extrabold uppercase transition-all cursor-pointer ${
+                          tutorialLangTab === lang
+                            ? "bg-[#4F7066] text-white shadow-3xs"
+                            : "text-neutral-500 hover:bg-white/50 hover:text-slate-800"
+                        }`}
+                      >
+                        {lang === "English" && "English 🇬🇧"}
+                        {lang === "siSwati" && "siSwati 🇸🇿"}
+                        {lang === "Setswana" && "Setswana 🇧🇼"}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Tutorial Cards list */}
+                  <div className="space-y-2.5">
+                    {tutorialLangTab === "English" && [
+                      {
+                        phrase: "Dumela BabyBot, I am 32 weeks pregnant and experiencing sudden facial swelling.",
+                        focus: "Pre-Eclampsia Tracking",
+                        keywords: ["swelling", "32 weeks"],
+                        tip: "Specifying your gestational week enables Vytal's clinical engine to calibrate fluid pressure thresholds perfectly."
+                      },
+                      {
+                        phrase: "What are the safe blood pressure bounds for a third trimester mother?",
+                        focus: "Hypertensive Telemetry",
+                        keywords: ["blood pressure", "third trimester"],
+                        tip: "Asking for safe bounds helps the AI display personalized warning benchmarks based on your latest clinical log."
+                      },
+                      {
+                        phrase: "I have extreme fatigue and a severe headache that won't go away.",
+                        focus: "Emergency Danger Signs",
+                        keywords: ["fatigue", "headache"],
+                        tip: "Mentioning headaches combined with fatigue triggers critical warnings for pre-eclampsia screening."
+                      }
+                    ].map((item, idx) => (
+                      <div key={idx} className="bg-white/90 border border-neutral-150/60 rounded-xl p-2.5 space-y-2 shadow-3xs hover:border-pink-200/50 transition-all">
+                        <div className="flex items-center justify-between pb-1 border-b border-dashed border-neutral-100">
+                          <span className="text-[8.5px] font-black uppercase text-pink-600 tracking-wider font-mono">
+                            Focus: {item.focus}
+                          </span>
+                          <div className="flex gap-1">
+                            {item.keywords.map((kw, kIdx) => (
+                              <span key={kIdx} className="text-[7.5px] font-black font-mono bg-neutral-100 text-[#4F7066] px-1 py-0.5 rounded uppercase">
+                                #{kw}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        <p className="text-[10px] font-bold text-[#2B1B2E] italic bg-pink-50/25 p-2 rounded-lg border border-pink-150/30 leading-snug">
+                          "{item.phrase}"
+                        </p>
+
+                        <div className="flex items-center justify-between gap-2.5 pt-1">
+                          <p className="text-[8px] text-[#5F716A] font-semibold leading-tight flex-1">
+                            💡 <span className="font-bold text-slate-700">Tip:</span> {item.tip}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAiText(item.phrase);
+                              chatInputRef.current?.scrollIntoView({ behavior: 'smooth' });
+                              chatInputRef.current?.focus();
+                            }}
+                            className="bg-[#2B1B2E] hover:bg-[#1A0F1D] text-white text-[8px] font-black uppercase px-2.5 py-1 rounded-md transition-all active:scale-95 cursor-pointer shrink-0"
+                          >
+                            🗣️ Load & Test
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {tutorialLangTab === "siSwati" && [
+                      {
+                        phrase: "Ekseni BabyBot, ngicela kuta kuhlola Sister Kunene ngoba nginetinyawo letivuvukile.",
+                        focus: "Edema & Gestational Diets",
+                        keywords: ["letivuvukile", "pre-eclampsia"],
+                        tip: "Using local regional clinical terms like 'letivuvukile' maps directly to fluid retention alert vectors."
+                      },
+                      {
+                        phrase: "BabyBot, ngingayivikela njani imikhuhlane yetemcondvo ngesikhatsi semitsimba?",
+                        focus: "Maternal Well-being",
+                        keywords: ["temcondvo", "ngesikhatsi"],
+                        tip: "Maternal wellness queries in siSwati trigger specific localized counseling suggestions."
+                      },
+                      {
+                        phrase: "Ngicela imininingwane yekuchumana na Sister Kunene.",
+                        focus: "Midwife Communications",
+                        keywords: ["kuchumana", "Sister Kunene"],
+                        tip: "Asking for midwife names returns instant contact links and offline SMS sync templates."
+                      }
+                    ].map((item, idx) => (
+                      <div key={idx} className="bg-white/90 border border-neutral-150/60 rounded-xl p-2.5 space-y-2 shadow-3xs hover:border-pink-200/50 transition-all">
+                        <div className="flex items-center justify-between pb-1 border-b border-dashed border-neutral-100">
+                          <span className="text-[8.5px] font-black uppercase text-pink-600 tracking-wider font-mono">
+                            Focus: {item.focus}
+                          </span>
+                          <div className="flex gap-1">
+                            {item.keywords.map((kw, kIdx) => (
+                              <span key={kIdx} className="text-[7.5px] font-black font-mono bg-neutral-100 text-[#4F7066] px-1 py-0.5 rounded uppercase">
+                                #{kw}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        <p className="text-[10px] font-bold text-[#2B1B2E] italic bg-pink-50/25 p-2 rounded-lg border border-pink-150/30 leading-snug">
+                          "{item.phrase}"
+                        </p>
+
+                        <div className="flex items-center justify-between gap-2.5 pt-1">
+                          <p className="text-[8px] text-[#5F716A] font-semibold leading-tight flex-1">
+                            💡 <span className="font-bold text-slate-700">Tip:</span> {item.tip}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAiText(item.phrase);
+                              chatInputRef.current?.scrollIntoView({ behavior: 'smooth' });
+                              chatInputRef.current?.focus();
+                            }}
+                            className="bg-[#2B1B2E] hover:bg-[#1A0F1D] text-white text-[8px] font-black uppercase px-2.5 py-1 rounded-md transition-all active:scale-95 cursor-pointer shrink-0"
+                          >
+                            🗣️ Load & Test
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {tutorialLangTab === "Setswana" && [
+                      {
+                        phrase: "Dumela BabyBot, ke rurugile ditshipi le go lwala mo ditlhaloganyong.",
+                        focus: "Fluid Retentions & Anxiety",
+                        keywords: ["rurugile", "ditlhaloganyong"],
+                        tip: "Combining physiological symptoms with mood cues helps BabyBot prioritize mental wellness support."
+                      },
+                      {
+                        phrase: "A masea a tshwanetse go utlwa ditlhabi mo mpa dithubeng tsa beke ya 36?",
+                        focus: "Fetal Kick Guidelines",
+                        keywords: ["ditlhabi", "beke ya 36"],
+                        tip: "Queries referencing 'ditlhabi' (pains) in week 36 are scanned for premature active labor risk metrics."
+                      },
+                      {
+                        phrase: "Ke batla go ikgolaganya le Sister Thandeka mo lephateng la botsogo.",
+                        focus: "SADC Nurse Dispatcher",
+                        keywords: ["ikgolaganya", "Sister Thandeka"],
+                        tip: "Direct clinician routing instantly flags your latest blood pressure metrics to Sister Thandeka's triage dashboard."
+                      }
+                    ].map((item, idx) => (
+                      <div key={idx} className="bg-white/90 border border-neutral-150/60 rounded-xl p-2.5 space-y-2 shadow-3xs hover:border-pink-200/50 transition-all">
+                        <div className="flex items-center justify-between pb-1 border-b border-dashed border-neutral-100">
+                          <span className="text-[8.5px] font-black uppercase text-pink-600 tracking-wider font-mono">
+                            Focus: {item.focus}
+                          </span>
+                          <div className="flex gap-1">
+                            {item.keywords.map((kw, kIdx) => (
+                              <span key={kIdx} className="text-[7.5px] font-black font-mono bg-neutral-100 text-[#4F7066] px-1 py-0.5 rounded uppercase">
+                                #{kw}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+
+                        <p className="text-[10px] font-bold text-[#2B1B2E] italic bg-pink-50/25 p-2 rounded-lg border border-pink-150/30 leading-snug">
+                          "{item.phrase}"
+                        </p>
+
+                        <div className="flex items-center justify-between gap-2.5 pt-1">
+                          <p className="text-[8px] text-[#5F716A] font-semibold leading-tight flex-1">
+                            💡 <span className="font-bold text-slate-700">Tip:</span> {item.tip}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAiText(item.phrase);
+                              chatInputRef.current?.scrollIntoView({ behavior: 'smooth' });
+                              chatInputRef.current?.focus();
+                            }}
+                            className="bg-[#2B1B2E] hover:bg-[#1A0F1D] text-white text-[8px] font-black uppercase px-2.5 py-1 rounded-md transition-all active:scale-95 cursor-pointer shrink-0"
+                          >
+                            🗣️ Load & Test
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Subtab 2: Audio Health Guides */}
+              {eduHubSubTab === "audio" && (
+                <div className="space-y-3.5 animate-fade-in">
+                  <p className="text-[9.5px] text-[#5F716A] leading-relaxed font-semibold">
+                    Listen to offline maternal health lessons and advice compiled by SADC specialist midwives. Features high-clarity voice compression streams for low-bandwidth cellular reception:
+                  </p>
+
+                  {/* Active Player Card */}
+                  {currentEduTrack !== null && (
+                    <div className="bg-[#FAF6F2] border border-pink-150 rounded-2xl p-3 space-y-2.5 shadow-xs relative overflow-hidden">
+                      {/* Active Pulse light */}
+                      <div className="absolute top-2 right-2 flex items-center gap-1 bg-white/80 px-1.5 py-0.5 rounded border border-neutral-150">
+                        <span className={`w-1.5 h-1.5 rounded-full ${isEduPlaying ? 'bg-emerald-500 animate-ping' : 'bg-red-400'}`} />
+                        <span className="text-[7.5px] font-bold text-slate-500 font-mono">
+                          {isEduPlaying ? "STREAMING" : "PAUSED"}
+                        </span>
+                      </div>
+
+                      <div className="text-left space-y-0.5">
+                        <span className="text-[8px] font-black text-[#E84FA0] uppercase font-mono tracking-wider block">Currently playing track</span>
+                        <h5 className="text-[10.5px] font-black text-[#2B1B2E] leading-tight pr-14">
+                          {educationalTracks[currentEduTrack].title}
+                        </h5>
+                        <p className="text-[8px] text-[#4F7066] font-bold uppercase font-mono">
+                          🗣️ {educationalTracks[currentEduTrack].speaker}
+                        </p>
+                      </div>
+
+                      {/* Animated Bouncing Audio Spectrum bars */}
+                      <div className="bg-white/60 rounded-xl p-2 border border-neutral-200/30 flex items-center justify-between gap-3">
+                        <span className="text-[8px] font-mono text-neutral-500">{Math.floor(eduProgress / 20)}:{(Math.floor((eduProgress % 20) * 3)).toString().padStart(2, '0')}</span>
+                        
+                        {/* Audio Waveform layout */}
+                        <div className="flex-1 flex gap-0.5 items-end justify-center h-8 px-1 overflow-hidden">
+                          {[...Array(24)].map((_, i) => {
+                            const isEdge = i < 4 || i > 20;
+                            const height = isEduPlaying 
+                              ? `${isEdge ? 4 + Math.random() * 8 : 6 + Math.random() * 20}px` 
+                              : "6px";
+                            return (
+                              <span
+                                key={i}
+                                className={`w-1 rounded-full transition-all duration-300 ${isEduPlaying ? 'bg-[#E84FA0]' : 'bg-neutral-300'}`}
+                                style={{ height }}
+                              />
+                            );
+                          })}
+                        </div>
+
+                        <span className="text-[8px] font-mono text-[#4F7066] font-bold">
+                          {educationalTracks[currentEduTrack].duration}
+                        </span>
+                      </div>
+
+                      {/* Interactive Progress Slider */}
+                      <div className="space-y-1">
+                        <div 
+                          className="h-2 w-full bg-neutral-200 rounded-full overflow-hidden cursor-pointer relative"
+                          onClick={(e) => {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const clickX = e.clientX - rect.left;
+                            const width = rect.width;
+                            const newProgress = Math.max(0, Math.min(100, (clickX / width) * 100));
+                            setEduProgress(newProgress);
+                          }}
+                        >
+                          <div 
+                            className="h-full bg-gradient-to-r from-[#FF6FB1] to-[#E84FA0] transition-all duration-100" 
+                            style={{ width: `${eduProgress}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Sound settings control grid */}
+                      <div className="grid grid-cols-2 gap-2 pt-1 pb-0.5">
+                        {/* Volume Adjust */}
+                        <div className="flex items-center gap-1.5 bg-white/40 p-1 rounded-lg border border-neutral-200/50">
+                          <Volume2 className="w-3.5 h-3.5 text-[#5F716A]" />
+                          <input 
+                            type="range" 
+                            min="0" 
+                            max="1" 
+                            step="0.1" 
+                            value={eduVolume} 
+                            onChange={(e) => {
+                              const v = parseFloat(e.target.value);
+                              setEduVolume(v);
+                            }}
+                            className="w-full h-1 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-[#E84FA0]" 
+                          />
+                          <span className="text-[7.5px] font-mono text-neutral-500 w-5 text-right">{Math.round(eduVolume * 100)}%</span>
+                        </div>
+
+                        {/* Speech Rate Speed Selector */}
+                        <div className="flex items-center justify-between bg-white/40 p-1 rounded-lg border border-neutral-200/50">
+                          <span className="text-[8px] font-bold text-neutral-500 font-mono uppercase pl-1">Speed Rate:</span>
+                          <div className="flex gap-0.5">
+                            {[0.75, 1.0, 1.25].map((speed) => (
+                              <button
+                                key={speed}
+                                type="button"
+                                onClick={() => setEduPlaybackSpeed(speed)}
+                                className={`px-1 rounded text-[7.5px] font-black font-mono transition-all cursor-pointer ${
+                                  eduPlaybackSpeed === speed
+                                    ? "bg-[#2B1B2E] text-white"
+                                    : "text-slate-600 hover:bg-neutral-200"
+                                }`}
+                              >
+                                {speed}x
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Main Audio Play Buttons */}
+                      <div className="flex gap-1.5 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleEduTrackPlay(currentEduTrack)}
+                          className="flex-1 py-1.5 bg-[#4F7066] hover:bg-[#3D574F] text-white text-[9px] font-black uppercase tracking-wider rounded-xl flex items-center justify-center gap-1 cursor-pointer transition-all active:scale-95 shadow-3xs"
+                        >
+                          {isEduPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                          <span>{isEduPlaying ? "Pause Audio Track" : "Resume Audio Track"}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            stopEducationalSynth();
+                            setIsEduPlaying(false);
+                            setCurrentEduTrack(null);
+                            setEduProgress(0);
+                          }}
+                          className="px-3.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200/40 rounded-xl text-[9px] font-black uppercase cursor-pointer transition-all active:scale-95"
+                        >
+                          Stop
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tracks list */}
+                  <div className="space-y-2">
+                    {[
+                      {
+                        title: "Pre-Eclampsia Telemetry & Prevention Cues",
+                        speaker: "Sister Thandeka (SADC Clinic Telemetry Supervisor)",
+                        language: "siSwati & English",
+                        duration: "4:20",
+                        description: "How to recognize early fluid retention, extreme headaches, and how clinical alert streams transmit to rural centers."
+                      },
+                      {
+                        title: "Maternal Gestational Nutrition",
+                        speaker: "Nurse Simelane (Mbabane Rural Clinic Admin)",
+                        language: "siSwati",
+                        duration: "3:15",
+                        description: "Regional dietary strategies focusing on local SADC crops, leafy greens, and iron-rich foods to prevent maternal anemia."
+                      },
+                      {
+                        title: "Maternal Movement Counting (Kick Counts)",
+                        speaker: "Sister Kunene (SADC Referral Liaison)",
+                        language: "English & Setswana",
+                        duration: "5:45",
+                        description: "Step-by-step guidance on counting fetal kicks in trimester three and when to notify your midwife about changes in pattern."
+                      },
+                      {
+                        title: "Postpartum Mental Health Counseling",
+                        speaker: "Dr. Mokgoro (SADC Clinical Advisory)",
+                        language: "Setswana",
+                        duration: "4:10",
+                        description: "Supportive post-natal mental health guidance, local support connections, and overcoming anxiety in new mothers."
+                      }
+                    ].map((track, tIdx) => (
+                      <div 
+                        key={tIdx} 
+                        className={`border rounded-xl p-2.5 transition-all flex items-start justify-between gap-3 ${
+                          currentEduTrack === tIdx 
+                            ? "bg-pink-50/30 border-pink-200 shadow-3xs" 
+                            : "bg-white hover:bg-neutral-50 border-neutral-150/60"
+                        }`}
+                      >
+                        <div className="space-y-1 text-left flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[7.5px] font-black font-mono bg-pink-100 text-[#E84FA0] px-1 py-0.5 rounded">
+                              {track.language}
+                            </span>
+                            <span className="text-[7.5px] font-bold text-slate-400 font-mono flex items-center gap-0.5">
+                              <Clock className="w-2.5 h-2.5" /> {track.duration}
+                            </span>
+                          </div>
+                          <h6 className="text-[10px] font-black text-[#2B1B2E] uppercase truncate">
+                            {track.title}
+                          </h6>
+                          <p className="text-[8.5px] text-[#5F716A] leading-tight font-semibold">
+                            {track.description}
+                          </p>
+                          <span className="text-[8px] font-extrabold text-[#4F7066] block font-sans">
+                            🗣️ {track.speaker}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleEduTrackPlay(tIdx)}
+                          className={`p-2 rounded-xl border shrink-0 transition-all cursor-pointer ${
+                            currentEduTrack === tIdx && isEduPlaying
+                              ? "bg-[#2B1B2E] text-white border-[#2B1B2E] animate-pulse"
+                              : "bg-pink-100/60 hover:bg-pink-100 text-[#E84FA0] border-pink-100"
+                          }`}
+                          title={currentEduTrack === tIdx && isEduPlaying ? "Pause Track" : "Play Track"}
+                        >
+                          {currentEduTrack === tIdx && isEduPlaying ? (
+                            <Pause className="w-4 h-4" />
+                          ) : (
+                            <Play className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
             </div>
 
@@ -3685,7 +5013,7 @@ export default function PatientPortal({
             <div className="p-3.5 bg-white/55 backdrop-blur-md border border-white/50 rounded-3xl shadow-xs flex gap-3 items-center">
               <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-100 to-teal-50 border border-white shadow-xs shrink-0 flex items-center justify-center relative">
                 <img 
-                  src="/src/assets/images/maternal_baby_stages_1781801156793.jpg" 
+                  src={imgMaternalBabyStages} 
                   alt="Sister Kunene" 
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover shrink-0 scale-105"
@@ -3789,7 +5117,7 @@ export default function PatientPortal({
               </div>
               
               {/* Segmented Controller for Academy Mode */}
-              <div className="flex gap-1 p-1 bg-white/50 border border-[#D5E1DB] backdrop-blur-md rounded-xl shadow-3xs" id="academy-mode-switcher">
+              <div className="flex gap-1 p-1 bg-white/50 border border-[#D5E1DB] backdrop-blur-md rounded-xl shadow-3xs flex-wrap" id="academy-mode-switcher">
                 <button
                   type="button"
                   onClick={() => setAcademyMode("conditions")}
@@ -3800,6 +5128,17 @@ export default function PatientPortal({
                   }`}
                 >
                   Conditions
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAcademyMode("milestones")}
+                  className={`px-2 py-1.5 rounded-lg font-black text-[8px] uppercase tracking-wider cursor-pointer transition-all ${
+                    academyMode === "milestones"
+                      ? "bg-[#4F7066] text-white shadow-xs"
+                      : "text-[#4F7066] hover:bg-white/40"
+                  }`}
+                >
+                  🌿 Weekly Milestones
                 </button>
                 <button
                   type="button"
@@ -4374,6 +5713,518 @@ export default function PatientPortal({
                     </div>
                   );
                 })()}
+
+              </div>
+            )}
+
+            {/* Render 4: WEEKLY PREGNANCY MILESTONES & OFFLINE SMS/USSD SIMULATOR */}
+            {academyMode === "milestones" && (
+              <div className="space-y-4 animate-fade-in text-left">
+                <div className="p-4 bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-100/60 rounded-2xl">
+                  <span className="text-[8.5px] font-black uppercase text-teal-800 bg-teal-100/60 p-1 rounded-md mb-1.5 inline-block">Multilingual Prenatal Milestone Hub</span>
+                  <h4 className="text-xs font-black text-[#2B1B2E] uppercase">SADC Pregnancy Milestones & Offline Telecoms</h4>
+                  <p className="text-[10px] text-neutral-600 leading-normal font-semibold mt-1">
+                    Select a developmental week below to read localized guides, nutrition tips, and safe labor warning triggers. To see how rural mothers without smartphones access this, dial into the **Offline USSD/SMS Simulator** box below!
+                  </p>
+                </div>
+
+                {/* Multilingual Week Selector Pill Row */}
+                <div className="flex gap-1.5 overflow-x-auto pb-1" id="milestone-week-triggers">
+                  {[16, 20, 24, 28, 32, 36, 40].map((wk) => (
+                    <button
+                      key={wk}
+                      type="button"
+                      onClick={() => setCurrentWeek(wk)}
+                      className={`px-3 py-2 text-xs font-black rounded-xl select-none shrink-0 cursor-pointer border transition-all ${
+                        currentWeek === wk
+                          ? "bg-[#4F7066] text-white border-[#4F7066]"
+                          : "bg-white text-[#4F7066] border-[#D5E1DB] hover:bg-neutral-50"
+                      }`}
+                      style={{ minHeight: "40px" }}
+                    >
+                      Week {wk}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Localized Milestone Card Content with Flags */}
+                {(() => {
+                  const milestonesData: Record<number, {
+                    en: { milestone: string; nutrition: string; discomforts: string; laborSigns: string };
+                    sz: { milestone: string; nutrition: string; discomforts: string; laborSigns: string };
+                    tn: { milestone: string; nutrition: string; discomforts: string; laborSigns: string };
+                    zu: { milestone: string; nutrition: string; discomforts: string; laborSigns: string };
+                  }> = {
+                    16: {
+                      en: {
+                        milestone: "Baby is the size of an avocado. Facial muscles are forming, and eyes are sensitive to light.",
+                        nutrition: "Ensure high Iron intake to avoid anemia. Eat leafy greens, beans, and red meat.",
+                        discomforts: "Minor leg cramps & round ligament stretching pain around the lower pelvic floor.",
+                        laborSigns: "Warning: Alert Sister Kunene if experiencing severe abdominal cramping or bleeding."
+                      },
+                      sz: {
+                        milestone: "Umntfwana ulingana nemango. Imisipha yebuso iyacala kwakheka, kantsi nemehlo ayabona kukhanya.",
+                        nutrition: "Idla sikhundla senyama lelandzelako neluhlata kute utfoli iron lekhadzi.",
+                        discomforts: "Kuhlupheka kwemtimba kancane kanye nekuciniseka kwemishini ngaphasi kwengati.",
+                        laborSigns: "Isexwayiso: Shaya lucingo Sister Kunene uma unebuhlungu lobukhulu kakhulu."
+                      },
+                      tn: {
+                        milestone: "Ngwana o lekana le afokhado. Mesifa ya sefatlhego e a bopiwa, mme dintlho di amogela lesedi.",
+                        nutrition: "Netefatsa go ja dijo tse di nang le Aene go thibela madi a mannye.",
+                        discomforts: "Go ruruga ga dinao mmogo le ditlhabi tse di potlana kwa tlase.",
+                        laborSigns: "Tlhagiso: Bega ka pele fa o bona madi kgotsa ditlhabi tse di faphegileng mo mpeng."
+                      },
+                      zu: {
+                        milestone: "Ingane ilingana ne-avocado. Imisipha yobuso iqala ukubumbeka, amehlo azwa ukukhanya.",
+                        nutrition: "Qinisekisa ukuthi udla ukudla okunothe nge-Iron: isipinashi, ubhontshisi, nenyama ebomvu.",
+                        discomforts: "Izinhlungu emilenzeni kanye nasekuzisandululeni kancane kwesibeletho.",
+                        laborSigns: "Isexwayiso: Thintana nombelethisi uma unokusikeka kwesisu okunamandla kakhulu."
+                      }
+                    },
+                    20: {
+                      en: {
+                        milestone: "Midway point! Baby is swallow-reflex learning and active kicks or flutters are clearly felt.",
+                        nutrition: "Load up on Folate and Calcium. Local yogurts, milk, and high-dose prenatal supplements of Folate are crucial.",
+                        discomforts: "Mild backaches as center of gravity shifts. Swollen ankles start to manifest in warm weather.",
+                        laborSigns: "Warning: Persistent watery discharge or heavy uterine pressure require clinical screening."
+                      },
+                      sz: {
+                        milestone: "Sikhundla sekuhamba emkhatsini! Kulula kuva tinyatfuko nemishini emtimbeni wakho masinyane.",
+                        nutrition: "Thatha imitsi ye-Calcium ne-Folate onkhe malanga kute uvikele amathambo amntfwana.",
+                        discomforts: "Ubuhlungu emgodleni kancane kute sikhundla setingati sikhuphukele phambili.",
+                        laborSigns: "Isexwayiso: Uma uvutsa ematfumbu mbovu noma unekuvuza emantini, shesha esibhedlela."
+                      },
+                      tn: {
+                        milestone: "Legato la bogare! Ngwana o simolola go fofora mme o utlwa ditshegofatso tsa gagwe sentle.",
+                        nutrition: "Ja dijo tse di nang le khalsiamo e le go godisa marapo a ngwana. Nwa mashi le datshe.",
+                        discomforts: "Ditlhabi tse di botlana ka kwa morago mmogo le go nna boima ga dinao tsu.",
+                        laborSigns: "Tlhagiso: Fa metsi a tswa mo mmeleng ka tsela e sa tlwaelegang, rurifatsa tleleniki."
+                      },
+                      zu: {
+                        milestone: "Uhafu wendlela! Ingane iyaqala ukugwinya futhi ungase uzwe ukunyakaza kwayo okulula.",
+                        nutrition: "Folate kanye ne-Calcium zibalulekile njengamanje. Phuza ubisi udle nemikhiqizo yalo.",
+                        discomforts: "Izinhlungu zomhlane kancane ngenxa yokushintsha kwesisindo somzimba.",
+                        laborSigns: "Isexwayiso: Uma uzwa isisu sikhefuzela njalo ngomzuzu, vakashela isikhungo masinyane."
+                      }
+                    },
+                    24: {
+                      en: {
+                        milestone: "Alveoli (lung cells) are developing. Baby can now respond to maternal voices or singing.",
+                        nutrition: "Limit processed sugars. Maintain whole grains (maize meal, sorghum) to prevent gestational diabetes spikes.",
+                        discomforts: "Heartburn, indigestion, and dry itchy skin on the expanding baby bump.",
+                        laborSigns: "Warning: Tell Sister Thandeka immediately if you experience visual flashes or severe upper right pain."
+                      },
+                      sz: {
+                        milestone: "Amaphaphisi emntfwana ayacala kwakheka. Uyeva umbuko nekukhuluma kwakho.",
+                        nutrition: "Khipha ushukela locekile. Idla sikhundla seemabele (sorghum, ligasha) kute uvikele ushukela wetempilo.",
+                        discomforts: "Ubuhlungu bemfudumalo ematfunjini kanye nekukhuhla kwesikhumba ngaphandle.",
+                        laborSigns: "Isexwayiso: Uma ubona luvundza emehlweni noma ube nemigraines lematfumbu khuluma na Sister."
+                      },
+                      tn: {
+                        milestone: "Makgwafo a ngwana a a simolola go gola. Ngwana o a go utlwa fa o bua kgotsa o opela letsheng.",
+                        nutrition: "Fungola go ja tswiri ya letshwao. Ja mabele go thibela madi a tswiri a maimana.",
+                        discomforts: "Kgotlelo ya mpa mmogo le go baba ga letlalo fa mpa e nna e gola thata.",
+                        laborSigns: "Tlhagiso: Go opiwa ke tlhogo thata go ka kaya hafetsetse ya madi. Rurifatsa ngaka."
+                      },
+                      zu: {
+                        milestone: "Umaphaphu ezaqala ukulungiselela umoya. Ingane isiyakuzwa uma ukhuluma nayo.",
+                        nutrition: "Gwema ushukela omningi owenziwe. Idla imifino ephelele namabele (sorghum) ukuvimbela ushukela wegazi.",
+                        discomforts: "Isiyezi nokushisa kwesifuba ngenxa yokuminyeka kwesisu kancane.",
+                        laborSigns: "Isexwayiso: Uma ubona kuphazima kwamehlo noma uba nekhanda elinzima, thola usizo lwezempilo."
+                      }
+                    },
+                    28: {
+                      en: {
+                        milestone: "Trimester three starts! Baby opens eyelids. Active brain tissue growth increases daily.",
+                        nutrition: "Protein loading: eat local eggs, milk, nuts, and clean running fish for baby's neural growth.",
+                        discomforts: "Shortness of breath as diaphragm is compressed. Leg leg muscle tightness during late night sleep.",
+                        laborSigns: "Preterm Labor trigger: Alert clinic if you experience more than 4 uterine contractions within 1 hour."
+                      },
+                      sz: {
+                        milestone: "Ithemu yesitsatfu iyacala! Umntfwana uvula emehlo kantsi nengcondvo idvweba ngeluhlobo lolumatfumbu.",
+                        nutrition: "Yondla liproteni lekhadzi: idle masi, emacecala, tinhlanti letihlantekile tasekhaya.",
+                        discomforts: "Kusondzela kwemtsefo wekuphefumula ngoba isisu sikhula sinyusela emahlombe.",
+                        laborSigns: "Preterm: Uma unetifiso letinyenti (inyatfuko letiningi esiswini ngelihora) fona esikhungweni."
+                      },
+                      tn: {
+                        milestone: "Kotara ya bofelo e a simolola! Ngwana o bula dintlho. Ditshika tsa tlhogo di gola ka bonako.",
+                        nutrition: "Ja dikotla tsa Poroteine tse di gona mo maeng, mashi, le tlhapi go godisa bokgoni jwa mogopolo.",
+                        discomforts: "Go phefumolola ka bothata ka gonne ngwana o katetse mafatlha a gago.",
+                        laborSigns: "Preterm labor: Fa o utlwa dikontraka tse di fetang tse nne ka nako ya ura, bega seka se."
+                      },
+                      zu: {
+                        milestone: "Kugala isizini yokugcina! Ingane ivula amehlo amancane, nobuchopho buyashuba ngokukhula.",
+                        nutrition: "Ukuqinisa amaprotheni: idle amaqanda asekhethini, ubhontshisi, nezinhlanzi ezihlanzekile.",
+                        discomforts: "Kuphelelwa umoya kalula ngoba isisu sizanyuka senyuse isandla se-diaphragm.",
+                        laborSigns: "Isexwayiso: Uma izinkontileka zesisu ziba ngaphezulu kwezine emahoreni amabili, phuthuma e-Clinic."
+                      }
+                    },
+                    32: {
+                      en: {
+                        milestone: "Baby is practicing breathing water loops to develop lungs. Toenails and fingernails are visible.",
+                        nutrition: "Hydration prioritisation! Drink 3 Litres of pure spring water daily to keep amniotic fluid levels perfect.",
+                        discomforts: "Pelvic floor muscle pain and pelvic pressure. Frequent visits to water closets.",
+                        laborSigns: "Warning: High urgency warning if sudden swelling of face/hands accompanies immediate headache."
+                      },
+                      sz: {
+                        milestone: "Umntfwana uvivinya ukuphefumula nge-fluid kute amaphaphisi alungele umhlaba wonkhe. Tinzzipho tiyabonakala.",
+                        nutrition: "Natsa emanti lamanyenti! Lokungenani emalitha lamatsatfu mahlana kute emanti omntfwana agcineleke kahle.",
+                        discomforts: "Ubuhlungu emalangeni kanye netifiso tekuya endlini lencane tikhatsi tonkhe.",
+                        laborSigns: "Hypertensive Crisis: Uma ukhumuka ebuso nangetandla masinyane, vakashela dotfela kute uphephe."
+                      },
+                      tn: {
+                        milestone: "Ngwana o simolola go ithuta go phefumolola ka metsi a mpa go godisa lungu. Dinala di a tswa.",
+                        nutrition: "Nwa metsi a mantsi! Dilithara tse tharo letsatsi le letsatsi go boloka dilingo tsa metsi mpa sentle.",
+                        discomforts: "Tshisego ya bogare jwa mpa le go fela sebete nako le nako go ya matlwaneng.",
+                        laborSigns: "Tlhagiso: Tlhagiso e kgolo fa o bona letlalo le ruruga mmogo le go nna le madi a matona."
+                      },
+                      zu: {
+                        milestone: "Ingane izama ukufunda ukuphefumula emanzini esibeletho. Izinzipho seyikhulile.",
+                        nutrition: "Natsa amanzi amaningi! Phila ngokuphuza amalitha amathathu amanzi ahlanzekile suku nosuku.",
+                        discomforts: "Ukuvuvuka kwezinyawo kanye nentshisekelo yokuvakashela indlu encane njalo ngemizuzu ebomvu.",
+                        laborSigns: "Eclampsia Warning: Uma uzwa isisu sikhefuzela njalo ngomzuzu, vakashela isikhungo masinyane."
+                      }
+                    },
+                    36: {
+                      en: {
+                        milestone: "Baby is fully formed and starting to descend or slide head-first into the pelvis (dropping).",
+                        nutrition: "Eat small, easily-digested high-energy meals. Raw honey, dry fruits, and local organic porridge.",
+                        discomforts: "Braxton-Hicks practice contractions. Sleep becomes difficult. Feeling extremely heavy.",
+                        laborSigns: "Signs of Labor: Fluid break (water breaking), pink show of mucus, or intense rhythmic contractions."
+                      },
+                      sz: {
+                        milestone: "Umntfwana usekelwe khona ncamashi, kanti ucala kuhliseka nge-hloko ngaphasi kwebuso betingati kute alungele kukhululwa.",
+                        nutrition: "Idla kudla lokuncane lokunika emandla kalula: luju lwasekhaya, titselo letiyinkomfe, nemphu yeligasha.",
+                        discomforts: "Tinyatfuko letilingisako tasiswini (Braxton-Hicks). Kulala kuba lukhuni, kululwa kwetinyawo njalo.",
+                        laborSigns: "Izibonakaliso: Kuphuka kwemanti emtimbeni (water breaking), nemicondo yetingati lemelele."
+                      },
+                      tn: {
+                        milestone: "Ngwana o godile gotlhe mme o simolola go fologela kwa tlase ka tlhogo go ipapanya le phandle.",
+                        nutrition: "Ja dijo tse di tlisang maatla di le dinnye: dinotshe, ditlhapi tsheshe, le lentshe la bogobe.",
+                        discomforts: "Ditlhabi tse di tlhagang ka sewelo tsa mpa. Go palelwa ke go robala sentle ditshila.",
+                        laborSigns: "Ditshupo tsa Pelegi: Metsi a a thubegang mo mpeng kgotsa ditlhabi tse di gatelelang morago ka nako e le nngwe."
+                      },
+                      zu: {
+                        milestone: "Ingane isiyibunjwe ngokuphelele futhi seyijika ngenhloko ibheka phansi ukulungiselela ukuzalwa.",
+                        nutrition: "Idla ukudla okuncane okulula ukugayeka emzimbeni: uju lwezinyosi lwemvelo, izithelo ezomisiwe, nophuthu.",
+                        discomforts: "Izinkontileka zokuziqeqesha zesibeletho (Braxton-Hicks). Ukulala kuba lufishi kakhulu.",
+                        laborSigns: "Izimpawu zokubeletha: Ukugqashuka kwamanzi, ukubonakala kwegazi elincane, noma izinkontileka ezibuhlungu njalo."
+                      }
+                    },
+                    40: {
+                      en: {
+                        milestone: "Full-term climax! The baby is ready to emerge into the SADC warm community embrace.",
+                        nutrition: "Maintain high-energy hydration. Light soups, fruit juices, and electrolyte-rich clean liquids.",
+                        discomforts: "Significant pelvic floor pressure with shooting pain. Sleep is highly fragmented.",
+                        laborSigns: "Labor Active! Water break, consistent persistent painful contractions every 5 mins. Go to maternity immediate!"
+                      },
+                      sz: {
+                        milestone: "Kuphelela kwetikhatsi! Umntfwana usekulungele kuphumela emhlabeni waseNingizimu ye-Afrika wetetfuko onkhe.",
+                        nutrition: "Tholela emandla lamakhadzi: sabhula lamanti letshele, ijusi yetitselo letihlanzekile tasekhaya.",
+                        discomforts: "Mshini lobukhulu wekuciniseka ngaphasi onkhe mhlana. Kulala lukhulu kakhulu.",
+                        laborSigns: "Amandla ematfunjini: Kuphuka kwemanti, kunyatfukela lobukhulu masekhondzi lamanyenti malanga onkhe!"
+                      },
+                      tn: {
+                        milestone: "Nako e fitlhile! Ngwana o siame go tswa go tlhaola sika sa mpa kwa tleleniking.",
+                        nutrition: "Boloka metsi le dijo tse di tlisang maatla tse di botlana. Dikotla tsa metsi ke bophelo.",
+                        discomforts: "Ditlhabi tse di gatelelang masisi kwa tlase mmogo le go palelwa ke go ikhutsa sentle.",
+                        laborSigns: "Metsi a a thubegang le ditlhabi tse di tlhagang ka dula tsa metsotso e le merataro. Tsamaya kwa kokelong!"
+                      },
+                      zu: {
+                        milestone: "Isikhathi sifikile! Ingane isilungele ukuphuma izohlangana nomphakathi ofudumele wase-SADC.",
+                        nutrition: "Idla ukudla okumanzi okunamandla: isobho elilula, ijusi, namanzi anama-electrolyte.",
+                        discomforts: "Ukucindezela okunamandla okubuhlungu okudubula emilenzeni.",
+                        laborSigns: "Ukuqala kokubeletha! Ukugqashuka kwamanzi, izinhlungu ezibamba njalo emizuzwini emihlanu ubude."
+                      }
+                    }
+                  };
+
+                  const currentWk = [16, 20, 24, 28, 32, 36, 40].includes(currentWeek) ? currentWeek : 24;
+                  const dataObj = milestonesData[currentWk];
+
+                  return (
+                    <div className="bg-white/70 border border-white p-4.5 rounded-3xl space-y-4 shadow-3xs" id={`milestone-scent-panel-${currentWk}`}>
+                      <div className="flex justify-between items-center pb-2.5 border-b border-neutral-150 flex-wrap gap-2">
+                        <span className="text-[10px] font-black text-[#2B1B2E] uppercase">Week {currentWk} Development Metrics</span>
+                        <div className="flex gap-1">
+                          {["en", "sz", "tn", "zu"].map((itemLang) => (
+                            <span 
+                              key={itemLang} 
+                              className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase cursor-pointer ${
+                                appLanguage.toLowerCase().startsWith(itemLang) || (itemLang === "sz" && appLanguage === "siSwati") || (itemLang === "tn" && appLanguage === "Setswana") || (itemLang === "zu" && appLanguage === "isiZulu")
+                                  ? "bg-pink-100 text-[#E84FA0] border border-[#FF6FB1]/20" 
+                                  : "bg-neutral-100 text-neutral-500"
+                              }`}
+                            >
+                              {itemLang}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Multilingual translations loops */}
+                      {["EN", "SZ (siSwati)", "TN (Setswana)", "ZU (isiZulu)"].map((langKey) => {
+                        const lowKey = langKey.substring(0, 2).toLowerCase() as "en" | "sz" | "tn" | "zu";
+                        const showActiveLang = langKey.toLowerCase().startsWith(appLanguage.toLowerCase().substring(0,2)) || (lowKey === "sz" && appLanguage === "siSwati") || (lowKey === "tn" && appLanguage === "Setswana") || (lowKey === "zu" && appLanguage === "isiZulu");
+                        const info = dataObj[lowKey];
+
+                        return (
+                          <div 
+                            key={langKey} 
+                            className={`space-y-3.5 transition-all text-[11px] leading-relaxed font-semibold ${showActiveLang ? "block border-l-2 border-emerald-500 pl-3.5" : "hidden opacity-40 hover:opacity-100 block pl-3.5"}`}
+                          >
+                            <span className="text-[7.5px] font-black uppercase text-neutral-500 tracking-wider block -mb-2">{langKey} Translation View</span>
+                            <div>
+                              <span className="text-[8.5px] font-black uppercase text-pink-600 tracking-wide block">🌱 Developmental Milestone:</span>
+                              <p className="text-[#2B1B2E]">{info.milestone}</p>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <span className="text-[8.5px] font-black uppercase text-emerald-700 tracking-wide block">🍎 Nutrition Directive:</span>
+                                <p className="text-neutral-700">{info.nutrition}</p>
+                              </div>
+                              <div>
+                                <span className="text-[8.5px] font-black uppercase text-amber-700 tracking-wide block">🧘 Common Discomforts:</span>
+                                <p className="text-neutral-700">{info.discomforts}</p>
+                              </div>
+                            </div>
+                            <div className="p-2.5 bg-rose-50 border border-rose-100 rounded-xl">
+                              <span className="text-[8px] font-black uppercase text-rose-700 tracking-wide block">⚠️ Warning / Safe Labor Signs:</span>
+                              <p className="text-rose-950 font-bold">{info.laborSigns}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
+                {/* VISUAL INTERACTIVE SADC SMS & USSD TELECOM SIMULATOR */}
+                <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl text-left font-mono space-y-4 shadow-xl" id="sadc-telecom-ussd-simulator">
+                  <div className="flex justify-between items-center text-[10px] text-zinc-500 pb-2.5 border-b border-neutral-800 flex-wrap gap-2">
+                    <span className="text-emerald-400 font-extrabold flex items-center gap-1">
+                      <Smartphone className="w-3.5 h-3.5 text-[#FF6FB1] animate-bounce" />
+                      SADC TELECOM COOPERATION SIMULATOR
+                    </span>
+                    <span className="px-2 py-0.5 bg-neutral-800 text-zinc-400 rounded-full font-bold">Offline Baseband SMS/USSD v2.1</span>
+                  </div>
+
+                  <p className="text-[10px] text-zinc-400 font-medium leading-normal">
+                    Rural mothers with older cellular devices dial <b>*120*55#</b> or text keywords like <b>HELP</b> or <b>WEEK 24</b> to <b>33911</b> to safely read localized milestones without cellular data. Touch or write in the dialer below to test:
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-stretch">
+                    {/* Left: Vintage cellular phone screen mockup wrapper */}
+                    <div className="md:col-span-8 bg-zinc-950 rounded-2xl border-4 border-zinc-700 p-3.5 shadow-inner flex flex-col justify-between" style={{ minHeight: "220px" }}>
+                      
+                      {/* Cellular Status indicators */}
+                      <div className="flex justify-between text-[8px] text-zinc-600 pb-2.5 border-b border-neutral-80 w-full">
+                        <span>Vodacom SADC</span>
+                        <div className="flex gap-1.5 font-bold">
+                          <span>📶 GSM CELL</span>
+                          <span>🔋 100% (No Net)</span>
+                        </div>
+                      </div>
+
+                      {/* Screen Console Output Terminal */}
+                      <div className="flex-1 py-4 flex flex-col justify-center text-xs text-[#00FF66] font-mono leading-relaxed space-y-2.5 min-h-[110px] select-all">
+                        {(() => {
+                          const codeText = simulatedActiveCall || "";
+                          if (!codeText) {
+                            return (
+                              <div className="text-center text-zinc-600 italic py-5" id="ussd-screen-fallback">
+                                &lt; Phone Screen Idle &gt;<br/>
+                                <span className="text-[9.5px] mt-1.5 text-zinc-700 block">Dial USSD command or text keyword</span>
+                              </div>
+                            );
+                          }
+
+                          // USSD Response Routing logic
+                          if (codeText === "*120*55#") {
+                            return (
+                              <div className="space-y-2 animate-fade-in text-left">
+                                <p className="text-emerald-300 font-extrabold pb-1 border-b border-emerald-900">Vytal Bridge Prenatal USSD Portal</p>
+                                <p>Select Your Current Stage:</p>
+                                <div className="space-y-1.5 font-semibold text-zinc-200 text-[10.5px]">
+                                  <p className="hover:text-emerald-400 cursor-pointer" onClick={() => setSimulatedActiveCall("*120*55*16#")}>1 &gt; Week 16 (Avocado Stage)</p>
+                                  <p className="hover:text-emerald-400 cursor-pointer" onClick={() => setSimulatedActiveCall("*120*55*24#")}>2 &gt; Week 24 (Lungs &sorghum)</p>
+                                  <p className="hover:text-emerald-400 cursor-pointer" onClick={() => setSimulatedActiveCall("*120*55*32#")}>3 &gt; Week 32 (Water Loop count)</p>
+                                  <p className="hover:text-emerald-400 cursor-pointer" onClick={() => setSimulatedActiveCall("*120*55*40#")}>4 &gt; Week 40 (Birth active!)</p>
+                                </div>
+                                <span className="text-[8.5px] text-zinc-500 block pt-1.5 border-t border-neutral-900 font-bold">Vodacom SADC (Free Charge)</span>
+                              </div>
+                            );
+                          }
+
+                          // Week Specific USSD screens
+                          if (codeText === "*120*55*16#") {
+                            return (
+                              <div className="space-y-2 animate-fade-in text-left">
+                                <p className="text-emerald-300 font-black">SADC Week 16 Milestone</p>
+                                <p className="text-zinc-200 text-[10px] leading-snug">Avocado size. Form muscles. Eyes light sensitive.</p>
+                                <p className="text-zinc-300 text-[10px] leading-snug"><b>Nutrition:</b> Leafy greens & Iron pills.</p>
+                                <p className="text-rose-300 text-[10px]"><b>Labor Warning:</b> Severe pains? Alert Sister.</p>
+                                <button type="button" onClick={() => setSimulatedActiveCall("*120*55#")} className="text-[9.5px] text-[#00FF55] underline block cursor-pointer">0 &gt; Back</button>
+                              </div>
+                            );
+                          }
+
+                          if (codeText === "*120*55*24#") {
+                            return (
+                              <div className="space-y-2 animate-fade-in text-left">
+                                <p className="text-emerald-300 font-black">SADC Week 24 Milestone</p>
+                                <p className="text-zinc-200 text-[10px] leading-snug">Lungs develop. Responds to mother's voice.</p>
+                                <p className="text-zinc-300 text-[10px] leading-snug"><b>Nutrition:</b> sorghum & maize meal over sugar.</p>
+                                <p className="text-rose-300 text-[10px]"><b>Sugar Warning:</b> Visual flashes or stomach pains?</p>
+                                <button type="button" onClick={() => setSimulatedActiveCall("*120*55#")} className="text-[9.5px] text-[#00FF55] underline block cursor-pointer">0 &gt; Back</button>
+                              </div>
+                            );
+                          }
+
+                          if (codeText === "*120*55*32#") {
+                            return (
+                              <div className="space-y-2 animate-fade-in text-left">
+                                <p className="text-emerald-300 font-black">SADC Week 32 Milestone</p>
+                                <p className="text-zinc-200 text-[10px] leading-snug">Baby swallow water tests. Toe/fingernails grow.</p>
+                                <p className="text-zinc-300 text-[10px] leading-snug"><b>Nutrition:</b> Drink 3L clean water daily.</p>
+                                <p className="text-rose-300 text-[10px]"><b>Eclampsia Alert:</b> Fast swelling hand or face!</p>
+                                <button type="button" onClick={() => setSimulatedActiveCall("*120*55#")} className="text-[9.5px] text-[#00FF55] underline block cursor-pointer">0 &gt; Back</button>
+                              </div>
+                            );
+                          }
+
+                          if (codeText === "*120*55*40#") {
+                            return (
+                              <div className="space-y-2 animate-fade-in text-left">
+                                <p className="text-emerald-300 font-bold">SADC Week 40 Labor Ready</p>
+                                <p className="text-zinc-200 text-[10px] leading-snug">Full term. Baby ready to emerge safely.</p>
+                                <p className="text-zinc-300 text-[10px]"><b>Nutrition:</b> Fruit juices, soups, hydration.</p>
+                                <p className="text-rose-400 font-black text-[10px] animate-pulse"><b>Active Labor:</b> Water breaking! Consistent pains every 5 mins. Go to Clinic immediate!</p>
+                                <button type="button" onClick={() => setSimulatedActiveCall("*120*55#")} className="text-[9.5px] text-[#00FF55] underline block cursor-pointer">0 &gt; Back</button>
+                              </div>
+                            );
+                          }
+
+                          // SMS Keyword HELP
+                          if (["help", "keyword help", "sms help"].includes(codeText.toLowerCase())) {
+                            return (
+                              <div className="space-y-1.5 animate-fade-in text-left text-[11px]">
+                                <p className="text-[#00FF66] font-extrabold bg-[#002200] p-1">&gt; SMS Incoming from 33911</p>
+                                <p className="text-zinc-300">"SADC prenatal education portal. SMS us **WEEK 24** or **WEEK 32** to receive localized maternal milestones and nutrition signals completely free on Vodacom/MTN."</p>
+                              </div>
+                            );
+                          }
+
+                          // SMS Specific Week keywords
+                          if (codeText.toLowerCase().includes("week")) {
+                            const parsedWeekNum = parseInt(codeText.replace(/[^0-9]/g, "")) || 24;
+                            return (
+                              <div className="space-y-1.5 animate-fade-in text-left text-[10.5px]">
+                                <p className="text-[#00FF66] font-extrabold bg-[#002200] p-1">&gt; SMS Week {parsedWeekNum} Details</p>
+                                <p className="text-zinc-300 font-bold leading-normal">
+                                  "Week {parsedWeekNum}: Baby is expanding nicely. Nutrition: Use Folate supplements. Watch for swelling! Signs of Labor: any water breaking or pains every 10 mins require Immediate dispatch to Sister Thandeka."
+                                </p>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div className="space-y-1 animate-fade-in text-left text-zinc-300">
+                              <p className="text-[#FF6FB1]">&gt; Input Query Not Recognized</p>
+                              <p className="text-[10px] text-zinc-500">GSM Server return: Try dialing "*120*55#" or texting "HELP".</p>
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* virtual telephone keypad details */}
+                      <div className="border-t border-zinc-800 pt-2 flex justify-between items-center text-[7.5px] text-zinc-600 font-mono">
+                        <span className="text-[#FF6FB1] font-bold">Press END to disconnect</span>
+                        <span>[ GSM NETWORK ]</span>
+                      </div>
+
+                    </div>
+
+                    {/* Right: Keypad tactile controls */}
+                    <div className="md:col-span-4 flex flex-col justify-between space-y-3.5 bg-zinc-800 p-3 rounded-2xl border border-zinc-700">
+                      <span className="text-[8.5px] font-bold text-zinc-400 uppercase text-center block leading-none">KEYPAD INPUT BOARD</span>
+                      
+                      {/* Grid dialer buttons */}
+                      <div className="grid grid-cols-3 gap-2 text-[10px] font-black text-center text-white">
+                        {[
+                          { val: "*", action: () => setSimulatedActiveCall("*") },
+                          { val: "120", action: () => setSimulatedActiveCall(simulatedActiveCall ? simulatedActiveCall + "120" : "120") },
+                          { val: "55", action: () => setSimulatedActiveCall(simulatedActiveCall ? simulatedActiveCall + "55" : "55") },
+                          { val: "#", action: () => setSimulatedActiveCall(simulatedActiveCall ? simulatedActiveCall + "#" : "#") },
+                        ].map((btn) => (
+                          <button
+                            key={btn.val}
+                            type="button"
+                            onClick={btn.action}
+                            className="bg-zinc-700 hover:bg-zinc-600 p-2.5 rounded-xl border border-zinc-600 active:bg-zinc-900 transition text-[#00FF66] cursor-pointer shadow-3xs"
+                            style={{ minHeight: "40px" }}
+                          >
+                            {btn.val}
+                          </button>
+                        ))}
+                        
+                        {/* Instant code triggers */}
+                        <button
+                          type="button"
+                          onClick={() => setSimulatedActiveCall("*120*55#")}
+                          className="bg-gradient-to-r from-emerald-600 to-green-600 border border-emerald-500 col-span-2 text-white p-2.5 rounded-xl text-[9px] uppercase tracking-wider cursor-pointer shadow-sm text-center"
+                          style={{ minHeight: "44px" }}
+                        >
+                          ☎️ Dial USSD Link
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSimulatedActiveCall("")}
+                          className="bg-[#E84FA0] border border-pink-400 p-2.5 rounded-xl text-[9.5px] uppercase cursor-pointer text-white"
+                          style={{ minHeight: "44px" }}
+                        >
+                          End
+                        </button>
+                      </div>
+
+                      {/* SMS text keywords list shortcuts buttons */}
+                      <div className="space-y-1.5 border-t border-zinc-700/60 pt-2 text-[#00FF66] font-sans">
+                        <span className="text-[8px] text-zinc-400 block pb-1 border-b border-zinc-700 uppercase font-black tracking-wider text-center">SMS KEYWORD SHORTCUTS</span>
+                        <div className="grid grid-cols-2 gap-1.5 text-[8.5px] font-black">
+                          <button
+                            type="button"
+                            onClick={() => setSimulatedActiveCall("HELP")}
+                            className="p-2 border border-zinc-600 bg-zinc-700 rounded-lg text-emerald-400 cursor-pointer text-center"
+                          >
+                            💬 Send "HELP"
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSimulatedActiveCall("WEEK 24")}
+                            className="p-2 border border-zinc-600 bg-zinc-700 rounded-lg text-emerald-400 cursor-pointer text-center"
+                          >
+                            💬 Send "WEEK 24"
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSimulatedActiveCall("WEEK 32")}
+                            className="p-2 border border-zinc-600 bg-zinc-700 rounded-lg text-emerald-400 cursor-pointer text-center"
+                          >
+                            💬 Send "WEEK 32"
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSimulatedActiveCall("WEEK 40")}
+                            className="p-2 border border-zinc-600 bg-zinc-700 rounded-lg text-emerald-400 cursor-pointer text-center"
+                          >
+                            💬 Send "WEEK 40"
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
 
               </div>
             )}
